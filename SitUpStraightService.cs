@@ -18,8 +18,8 @@ public class SitUpStraightService : BackgroundService, IDisposable
         InitializeBotClient();
         while (!stoppingToken.IsCancellationRequested)
         {
-            var currentHour = DateTime.Now.Hour;
             await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+            var currentHour = DateTime.Now.Hour;
 
             if (_lastHour < currentHour || _lastHour == 21 && currentHour == 9)
             {
