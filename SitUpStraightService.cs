@@ -16,9 +16,9 @@ public class SitUpStraightService : BackgroundService, IDisposable
     protected async override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         InitializeBotClient();
-        var currentHour = DateTime.Now.Hour;
         while (!stoppingToken.IsCancellationRequested)
         {
+            var currentHour = DateTime.Now.Hour;
             await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
 
             if (_lastHour < currentHour || _lastHour == 21 && currentHour == 9)
