@@ -4,7 +4,7 @@ using Telegram.Bot.Types;
 
 namespace NonStop.SitUpStraight.Bot;
 
-public class SitUpStraightService : BackgroundService, IDisposable
+public class SitUpStraightService(ILogger<SitUpStraightService> logger) : BackgroundService, IDisposable
 {
     private const string Message = "Выпрями спину!";
     private int _lastHour = 0;
@@ -50,6 +50,8 @@ public class SitUpStraightService : BackgroundService, IDisposable
             receiverOptions: new() { AllowedUpdates = [] },
             cancellationToken: _cancellationTokenSource.Token
         );
+
+        logger.LogTrace("Bot initialized");
     }
 
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
@@ -74,20 +76,21 @@ public class SitUpStraightService : BackgroundService, IDisposable
 
     private Task HandlePollingErrorAsync(ITelegramBotClient _, Exception exception, CancellationToken cancellationToken)
     {
-        var errorMessage = exception switch
+        var message = exception switch
         {
             ApiRequestException apiRequestException
                 => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
-            _ => exception.ToString()
+            _ => exception.Message
         };
 
-        // todo: log error
+        logger.LogError("{Message}", message);
+    
         return Task.CompletedTask;
     }
 
     public override void Dispose()
     {
         _cancellationTokenSource.Cancel();
-        base.Dispose();
+        // GC.SuppressFinalize(this);
     }
 }
