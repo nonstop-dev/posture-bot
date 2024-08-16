@@ -5,6 +5,7 @@ Actions:
 3. Send only in work days
 4. Add settings for bot to schedule sending
 5. Add changing the message
+6. Add timezone customization
 
 Later:
 Localization

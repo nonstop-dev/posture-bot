@@ -6,9 +6,8 @@ namespace NonStop.SitUpStraight.Bot;
 
 public class SitUpStraightService : BackgroundService, IDisposable
 {
-
     private const string Message = "Выпрями спину!";
-    private int _lastHour = DateTime.Now.Hour;
+    private int _lastHour = 0;
     private readonly List<long> _subscribers = [];
     private TelegramBotClient? _botClient;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
@@ -18,15 +17,21 @@ public class SitUpStraightService : BackgroundService, IDisposable
         InitializeBotClient();
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
-            var currentHour = DateTime.Now.Hour;
+            await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken);
 
-            if (_lastHour < currentHour || _lastHour == 21 && currentHour == 9)
+            if (_subscribers.Count == 0)
+                continue;
+
+            var currentHour = DateTime.Now.Hour;
+            if (currentHour > 18 || currentHour < 6)
             {
                 _lastHour = currentHour;
+                continue;
+            }
 
-                if (_subscribers.Count == 0)
-                    continue;
+            if (_lastHour < currentHour)
+            {
+                _lastHour = currentHour;
 
                 var tasks = _subscribers.Select(async subscriber => await SendMessageAsync(subscriber, Message, _cancellationTokenSource.Token));
                 await Task.WhenAll(tasks);
