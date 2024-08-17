@@ -13,8 +13,14 @@ Localization
 */
 
 using NonStop.SitUpStraight.Bot;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSerilog();
 builder.Services.AddHostedService<SitUpStraightService>();
 var app = builder.Build();
 app.Run();
