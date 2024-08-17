@@ -7,7 +7,9 @@ namespace NonStop.SitUpStraight.Bot;
 public class SitUpStraightService(ILogger<SitUpStraightService> logger) : BackgroundService, IDisposable
 {
     private const string Message = "Выпрями спину!";
-    private int _lastHour = 0;
+    private const int TotalMinutesCount = 59;
+    private const int StartHourUtc = 6;
+    private const int EndHourUtc = 18;
     private readonly List<long> _subscribers = [];
     private TelegramBotClient? _botClient;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
@@ -17,25 +19,19 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
         InitializeBotClient();
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken);
+            var minutes = TotalMinutesCount - DateTime.UtcNow.Minute;
+            var delay = minutes * DateTime.UtcNow.Second;
+            await Task.Delay(TimeSpan.FromSeconds(delay), stoppingToken);
 
             if (_subscribers.Count == 0)
                 continue;
 
             var currentHour = DateTime.Now.Hour;
-            if (currentHour > 18 || currentHour < 6)
-            {
-                _lastHour = currentHour;
+            if (currentHour > EndHourUtc || currentHour < StartHourUtc)
                 continue;
-            }
 
-            if (_lastHour < currentHour)
-            {
-                _lastHour = currentHour;
-
-                var tasks = _subscribers.Select(async subscriber => await SendMessageAsync(subscriber, Message, _cancellationTokenSource.Token));
-                await Task.WhenAll(tasks);
-            }
+            var tasks = _subscribers.Select(async subscriber => await SendMessageAsync(subscriber, Message, _cancellationTokenSource.Token));
+            await Task.WhenAll(tasks);
         }
     }
 
