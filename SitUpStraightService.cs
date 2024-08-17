@@ -47,7 +47,7 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
             cancellationToken: _cancellationTokenSource.Token
         );
 
-        logger.LogTrace("Bot initialized");
+        logger.LogInformation("Bot initialized");
     }
 
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
