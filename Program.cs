@@ -1,7 +1,6 @@
 ﻿/*
 Actions:
-+ 1. Send first message after bot starts: "Выпрями спину!"
-+ 2. Send the same every hour (by timer). Like 9:00 am, 10:00 am etc.
+- Save subscribers into db and restore after bot's restart
 3. Send only in work days
 4. Add settings for bot to schedule sending
 5. Add changing the message

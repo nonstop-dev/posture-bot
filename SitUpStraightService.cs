@@ -52,8 +52,16 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
 
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
-        if (update.Message is not { } message)
+        var message = update.Message;
+        if (message is null)
+        {
+            var memberChatId = update.MyChatMember?.Chat.Id;
+            if (memberChatId != null)
+                _subscribers.Remove(memberChatId.Value);
+
             return;
+        }
+
         if (message.Text is not { })
             return;
 
