@@ -7,7 +7,7 @@ namespace NonStop.SitUpStraight.Bot;
 public class SitUpStraightService(ILogger<SitUpStraightService> logger) : BackgroundService, IDisposable
 {
     private const string Message = "Выпрями спину!";
-    private const int TotalMinutesCount = 59;
+    private const int TotalMinutesCount = 60;
     private const int StartHourUtc = 6;
     private const int EndHourUtc = 18;
     private readonly List<long> _subscribers = [];
@@ -20,7 +20,7 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
         while (!stoppingToken.IsCancellationRequested)
         {
             var minutes = TotalMinutesCount - DateTime.UtcNow.Minute;
-            var delay = minutes * DateTime.UtcNow.Second;
+            var delay = (minutes * 60) - DateTime.UtcNow.Second;
             await Task.Delay(TimeSpan.FromSeconds(delay), stoppingToken);
 
             if (_subscribers.Count == 0)
