@@ -2,7 +2,7 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 
-namespace NonStop.SitUpStraight.Bot;
+namespace NonStop.SitUpStraight.Bot.Services;
 
 public class SitUpStraightService(ILogger<SitUpStraightService> logger) : BackgroundService, IDisposable
 {

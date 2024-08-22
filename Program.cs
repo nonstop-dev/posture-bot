@@ -12,8 +12,8 @@ Localization
 
 */
 
-using NonStop.SitUpStraight.Bot;
 using NonStop.SitUpStraight.Bot.Db;
+using NonStop.SitUpStraight.Bot.Services;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
