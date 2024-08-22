@@ -1,10 +1,11 @@
 ﻿/*
 Actions:
 - Save subscribers into db and restore after bot's restart
-3. Send only in work days
-4. Add settings for bot to schedule sending
-5. Add changing the message
-6. Add timezone customization
+- Send only in work days (customizeble)
+- Add settings for bot to schedule sending (every hour, twice a day)
+- Add changing the message
+- Add timezone customization
+- Add metrics: subscribers count
 
 Later:
 Localization
@@ -12,6 +13,7 @@ Localization
 */
 
 using NonStop.SitUpStraight.Bot;
+using NonStop.SitUpStraight.Bot.Db;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -21,5 +23,6 @@ Log.Logger = new LoggerConfiguration()
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSerilog();
 builder.Services.AddHostedService<SitUpStraightService>();
+builder.Services.AddDbContext<SitUpStraightDbContext>();
 var app = builder.Build();
 app.Run();
