@@ -1,6 +1,5 @@
 ﻿/*
 Actions:
-- Save subscribers into db and restore after bot's restart
 - Send only in work days (customizeble)
 - Add settings for bot to schedule sending (every hour, twice a day)
 - Add changing the message

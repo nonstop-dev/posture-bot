@@ -1,22 +1,29 @@
+using Microsoft.EntityFrameworkCore;
+using NonStop.SitUpStraight.Bot.Db;
+using NonStop.SitUpStraight.Bot.Models;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 
 namespace NonStop.SitUpStraight.Bot.Services;
 
-public class SitUpStraightService(ILogger<SitUpStraightService> logger) : BackgroundService, IDisposable
+public class SitUpStraightService(
+    ILogger<SitUpStraightService> logger,
+    IServiceScopeFactory serviceScopeFactory
+    ) : BackgroundService, IDisposable
 {
     private const string Message = "Выпрями спину!";
     private const int TotalMinutesCount = 60;
     private const int StartHourUtc = 6;
     private const int EndHourUtc = 18;
-    private readonly List<long> _subscribers = [];
+    private List<Subscriber> _subscribers = [];
     private TelegramBotClient? _botClient;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
     protected async override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         InitializeBotClient();
+        await RestoreSubscribersAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
             var minutes = TotalMinutesCount - DateTime.UtcNow.Minute;
@@ -30,7 +37,7 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
             if (currentHour > EndHourUtc || currentHour < StartHourUtc)
                 continue;
 
-            var tasks = _subscribers.Select(async subscriber => await SendMessageAsync(subscriber, Message, _cancellationTokenSource.Token));
+            var tasks = _subscribers.Select(async subscriber => await SendMessageAsync(subscriber.ChatId, Message, _cancellationTokenSource.Token));
             await Task.WhenAll(tasks);
         }
     }
@@ -57,8 +64,7 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
         {
             var memberChatId = update.MyChatMember?.Chat.Id;
             if (memberChatId != null)
-                _subscribers.Remove(memberChatId.Value);
-
+                await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
             return;
         }
 
@@ -66,10 +72,11 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
             return;
 
         var chatId = message.Chat.Id;
-        if (_subscribers.Contains(chatId))
+        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        if (subscriber != null)
             return;
 
-        _subscribers.Add(chatId);
+        await AddSubscriberAsync(chatId, cancellationToken);
         await SendMessageAsync(chatId, Message, cancellationToken);
     }
 
@@ -90,6 +97,47 @@ public class SitUpStraightService(ILogger<SitUpStraightService> logger) : Backgr
         logger.LogError("{Message}", message);
     
         return Task.CompletedTask;
+    }
+
+    private async Task AddSubscriberAsync(long chatId, CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+
+        Subscriber newSubscriber = new() { ChatId = chatId };
+        _subscribers.Add(newSubscriber);
+        dbContext.Subscribers.Add(newSubscriber);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RemoveSubscriberAsync(long chatId, CancellationToken cancellationToken)
+    {
+        var subscriberToRemove = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        if (subscriberToRemove != null)
+        {
+            _subscribers.Remove(subscriberToRemove);
+        }
+
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+
+        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken: cancellationToken);
+        if (subscriberFromDb == null)
+            return;
+
+        dbContext.Subscribers.Remove(subscriberFromDb);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RestoreSubscribersAsync(CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        _subscribers = await dbContext.Subscribers.ToListAsync(cancellationToken);
+        logger.LogInformation("Subscribers have been restored");
     }
 
     public override void Dispose()
