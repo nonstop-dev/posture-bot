@@ -5,6 +5,7 @@ Actions:
 - Add changing the message
 - Add timezone customization
 - Add metrics: subscribers count
+- Resolve all todos in the code
 
 Later:
 Localization

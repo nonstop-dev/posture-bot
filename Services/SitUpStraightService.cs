@@ -3,7 +3,10 @@ using NonStop.SitUpStraight.Bot.Db;
 using NonStop.SitUpStraight.Bot.Models;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
+using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace NonStop.SitUpStraight.Bot.Services;
 
@@ -14,8 +17,6 @@ public class SitUpStraightService(
 {
     private const string Message = "Выпрями спину!";
     private const int TotalMinutesCount = 60;
-    private const int StartHourUtc = 6;
-    private const int EndHourUtc = 18;
     private List<Subscriber> _subscribers = [];
     private TelegramBotClient? _botClient;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
@@ -33,11 +34,14 @@ public class SitUpStraightService(
             if (_subscribers.Count == 0)
                 continue;
 
-            var currentHour = DateTime.Now.Hour;
-            if (currentHour > EndHourUtc || currentHour < StartHourUtc)
-                continue;
+            var currentHourUtc = DateTime.Now.Hour;
 
-            var tasks = _subscribers.Select(async subscriber => await SendMessageAsync(subscriber.ChatId, Message, _cancellationTokenSource.Token));
+            var subscribersToSend = _subscribers.Where(subscriber =>
+                currentHourUtc > subscriber.StartHourUtc && currentHourUtc < subscriber.EndHourUtc);
+
+            var tasks = subscribersToSend.Select(async subscriber =>
+                await SendMessageAsync(subscriber.ChatId, Message, null, _cancellationTokenSource.Token));
+
             await Task.WhenAll(tasks);
         }
     }
@@ -47,10 +51,16 @@ public class SitUpStraightService(
         // todo: take from settings
         _botClient = new TelegramBotClient("242464316:AAFxxhWAurba-hw526Uo6TxjO7WS8B7PIio");
 
+        var receiverOptions = new ReceiverOptions
+        {
+            AllowedUpdates = [UpdateType.Message],
+            ThrowPendingUpdates = true // do not handle messages while bot was offline
+        };
+
         _botClient.StartReceiving(
             updateHandler: HandleUpdateAsync,
             pollingErrorHandler: HandlePollingErrorAsync,
-            receiverOptions: new() { AllowedUpdates = [] },
+            receiverOptions: receiverOptions,
             cancellationToken: _cancellationTokenSource.Token
         );
 
@@ -59,6 +69,12 @@ public class SitUpStraightService(
 
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
+        // todo: add try catch
+        if (update.Type != UpdateType.Message)
+        {
+            return;
+        }
+
         var message = update.Message;
         if (message is null)
         {
@@ -68,21 +84,45 @@ public class SitUpStraightService(
             return;
         }
 
-        if (message.Text is not { })
-            return;
+        switch (message.Text)
+        {
+            case BotCommands.Start:
+                await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
+                break;
+            case BotCommands.Timezone:
+                await SendMessageAsync(
+                    message.Chat.Id,
+                    "Скоро будет, а пока: выпрями спину!",
+                    null,
+                    cancellationToken);
+                break;
+            default:
+                return;
+        }
+    }
 
-        var chatId = message.Chat.Id;
+    private async Task HandleStartCommandAsync(long chatId, CancellationToken cancellationToken)
+    {
         var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
         if (subscriber != null)
             return;
 
         await AddSubscriberAsync(chatId, cancellationToken);
-        await SendMessageAsync(chatId, Message, cancellationToken);
+        var replyKeyboard = new ReplyKeyboardMarkup(
+            new List<KeyboardButton[]>()
+            {
+                new KeyboardButton[]
+                {
+                    new("Выбрать таймзону")
+                }
+            }) { ResizeKeyboard = true };
+
+        await SendMessageAsync(chatId, Message, replyKeyboard, cancellationToken);
     }
 
-    private async Task SendMessageAsync(long chatId, string message, CancellationToken cancellationToken)
+    private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
     {
-        await _botClient!.SendTextMessageAsync(chatId, Message, cancellationToken: cancellationToken);
+        await _botClient!.SendTextMessageAsync(chatId, message, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
     }
 
     private Task HandlePollingErrorAsync(ITelegramBotClient _, Exception exception, CancellationToken cancellationToken)
@@ -109,6 +149,7 @@ public class SitUpStraightService(
         _subscribers.Add(newSubscriber);
         dbContext.Subscribers.Add(newSubscriber);
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Subscriber has been added");
     }
 
     private async Task RemoveSubscriberAsync(long chatId, CancellationToken cancellationToken)
@@ -129,6 +170,7 @@ public class SitUpStraightService(
 
         dbContext.Subscribers.Remove(subscriberFromDb);
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Subscriber has been removed");
     }
 
     private async Task RestoreSubscribersAsync(CancellationToken cancellationToken)
