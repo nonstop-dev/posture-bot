@@ -1,0 +1,46 @@
+[
+    {
+        "title": "Калининград (UTC+2)",
+        "offset": 2
+    },
+    {
+        "title": "Москва (UTC+3)",
+        "offset": 3
+    },
+    {
+        "title": "Самара (UTC+4)",
+        "offset": 4
+    },
+    {
+        "title": "Екатеринбург (UTC+5)",
+        "offset": 5
+    },
+    {
+        "title": "Омск (UTC+6)",
+        "offset": 6
+    },
+    {
+        "title": "Красноярск",
+        "offset": 7
+    },
+    {
+        "title": "Иркутск (UTC+8)",
+        "offset": 8
+    },
+    {
+        "title": "Якутск (UTC+9)",
+        "offset": 9
+    },
+    {
+        "title": "Владивосток (UTC+10)",
+        "offset": 10
+    },
+    {
+        "title": "Магадан (UTC+11)",
+        "offset": 11
+    },
+    {
+        "title": "Камчатка (UTC+12)",
+        "offset": 12
+    }
+]
