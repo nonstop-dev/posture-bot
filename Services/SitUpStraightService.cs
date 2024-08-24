@@ -54,7 +54,7 @@ public class SitUpStraightService(
 
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = [UpdateType.Message],
+            AllowedUpdates = [UpdateType.Message, UpdateType.MyChatMember],
             ThrowPendingUpdates = true // do not handle messages while bot was offline
         };
 
@@ -71,11 +71,6 @@ public class SitUpStraightService(
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
         // todo: add try catch
-        if (update.Type != UpdateType.Message)
-        {
-            return;
-        }
-
         var message = update.Message;
         if (message is null)
         {
