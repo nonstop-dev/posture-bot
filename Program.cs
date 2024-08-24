@@ -12,6 +12,7 @@ Localization
 
 */
 
+using Microsoft.EntityFrameworkCore;
 using NonStop.SitUpStraight.Bot.Db;
 using NonStop.SitUpStraight.Bot.Services;
 using Serilog;
@@ -25,4 +26,9 @@ builder.Services.AddSerilog();
 builder.Services.AddHostedService<SitUpStraightService>();
 builder.Services.AddDbContext<SitUpStraightDbContext>();
 var app = builder.Build();
+
+using var scope = app.Services.CreateScope();
+var dbContext = scope.ServiceProvider.GetService<SitUpStraightDbContext>();
+dbContext!.Database.Migrate();
+
 app.Run();
