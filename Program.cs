@@ -27,8 +27,4 @@ builder.Services.AddHostedService<SitUpStraightService>();
 builder.Services.AddDbContext<SitUpStraightDbContext>();
 var app = builder.Build();
 
-using var scope = app.Services.CreateScope();
-var dbContext = scope.ServiceProvider.GetService<SitUpStraightDbContext>();
-dbContext!.Database.Migrate();
-
 app.Run();

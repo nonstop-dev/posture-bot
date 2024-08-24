@@ -23,6 +23,7 @@ public class SitUpStraightService(
 
     protected async override Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await EnsureDatabaseCreatedAndMigrated(stoppingToken);
         InitializeBotClient();
         await RestoreSubscribersAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
@@ -143,7 +144,6 @@ public class SitUpStraightService(
     {
         using var scope = serviceScopeFactory.CreateScope();
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
         Subscriber newSubscriber = new() { ChatId = chatId };
         _subscribers.Add(newSubscriber);
@@ -162,7 +162,6 @@ public class SitUpStraightService(
 
         using var scope = serviceScopeFactory.CreateScope();
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
         var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken: cancellationToken);
         if (subscriberFromDb == null)
@@ -177,9 +176,16 @@ public class SitUpStraightService(
     {
         using var scope = serviceScopeFactory.CreateScope();
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         _subscribers = await dbContext.Subscribers.ToListAsync(cancellationToken);
         logger.LogInformation("Subscribers have been restored");
+    }
+
+    private async Task EnsureDatabaseCreatedAndMigrated(CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+        await dbContext.Database.MigrateAsync(cancellationToken);
+        logger.LogInformation("Database migration completed");
     }
 
     public override void Dispose()
