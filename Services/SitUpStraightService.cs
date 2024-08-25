@@ -38,7 +38,7 @@ public class SitUpStraightService(
             var currentHourUtc = DateTime.Now.Hour;
 
             var subscribersToSend = _subscribers.Where(subscriber =>
-                currentHourUtc > subscriber.StartHourUtc && currentHourUtc < subscriber.EndHourUtc);
+                currentHourUtc >= subscriber.StartHourUtc && currentHourUtc <= subscriber.EndHourUtc);
 
             var tasks = subscribersToSend.Select(async subscriber =>
                 await SendMessageAsync(subscriber.ChatId, Message, null, _cancellationTokenSource.Token));
