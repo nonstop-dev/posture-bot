@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NonStop.SitUpStraight.Bot.Db;
 using NonStop.SitUpStraight.Bot.Models;
@@ -54,7 +55,7 @@ public class SitUpStraightService(
 
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = [UpdateType.Message, UpdateType.MyChatMember],
+            AllowedUpdates = [UpdateType.Message, UpdateType.MyChatMember, UpdateType.CallbackQuery],
             ThrowPendingUpdates = true // do not handle messages while bot was offline
         };
 
@@ -72,28 +73,69 @@ public class SitUpStraightService(
     {
         // todo: add try catch
         var message = update.Message;
-        if (message is null)
-        {
-            var memberChatId = update.MyChatMember?.Chat.Id;
-            if (memberChatId != null)
-                await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
-            return;
-        }
 
-        switch (message.Text)
+        switch (update.Type)
         {
-            case BotCommands.Start:
-                await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
+            case UpdateType.MyChatMember:
+                if (message is null)
+                {
+                    var memberChatId = update.MyChatMember?.Chat.Id;
+                    if (memberChatId != null)
+                        await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
+                    return;
+                }
                 break;
-            case BotCommands.Timezone:
+            case UpdateType.Message:
+                if (message is null)
+                    return;
+                switch (message.Text)
+                {
+                    case BotCommands.Start:
+                        await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
+                        break;
+                    case BotCommands.SelectTimezone:
+                        var timezones1 = LoadTimezones();
+                        var buttons = new List<InlineKeyboardButton[]>();
+                        foreach (var timezone in timezones1)
+                        {
+                            var button = new InlineKeyboardButton[]
+                            {
+                                InlineKeyboardButton.WithCallbackData(timezone.Title, timezone.Offset.ToString())
+                            };
+                            buttons.Add(button);
+                        }
+                        var markup = new InlineKeyboardMarkup(buttons);
+                        await SendMessageAsync(
+                            message.Chat.Id,
+                            BotCommands.SelectTimezone,
+                            markup,
+                            cancellationToken);
+                        break;
+                    case BotCommands.SelectDays:
+                        await SendMessageAsync(
+                            message.Chat.Id,
+                            "Скоро будет, а пока: выпрями спину!",
+                            null,
+                            cancellationToken);
+                        break;
+                    default:
+                        return;
+                }
+                break;
+            case UpdateType.CallbackQuery:
+                var callbackQuery = update.CallbackQuery;
+                var chat = callbackQuery.Message.Chat;
+                var timezones = LoadTimezones();
+                var offset = int.Parse(callbackQuery.Data!);
+
+                // await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
+
                 await SendMessageAsync(
-                    message.Chat.Id,
-                    "Скоро будет, а пока: выпрями спину!",
+                    chat.Id,
+                    "Скоро будет! А сейчас: выпрями спину!",
                     null,
                     cancellationToken);
                 break;
-            default:
-                return;
         }
     }
 
@@ -104,20 +146,25 @@ public class SitUpStraightService(
             return;
 
         await AddSubscriberAsync(chatId, cancellationToken);
-        var replyKeyboard = new ReplyKeyboardMarkup(
-            new List<KeyboardButton[]>()
-            {
-                new KeyboardButton[]
-                {
-                    new("Выбрать таймзону")
-                }
-            }) { ResizeKeyboard = true };
 
-        await SendMessageAsync(chatId, Message, replyKeyboard, cancellationToken);
+        await SendMessageAsync(chatId, Message, null, cancellationToken);
     }
 
     private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
     {
+        if (replyMarkup == null)
+        {
+            replyMarkup = new ReplyKeyboardMarkup(
+            new List<KeyboardButton[]>()
+            {
+                new KeyboardButton[]
+                {
+                    new(BotCommands.SelectTimezone),
+                    new(BotCommands.SelectDays)
+                }
+            })
+            { ResizeKeyboard = true };
+        }
         await _botClient!.SendTextMessageAsync(chatId, message, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
     }
 
@@ -181,6 +228,16 @@ public class SitUpStraightService(
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
         await dbContext.Database.MigrateAsync(cancellationToken);
         logger.LogInformation("Database migration completed");
+    }
+
+    // todo: use lazy async
+    private List<Timezone> LoadTimezones()
+    {
+        using var reader = new StreamReader("Data/timezones.json");
+        var json = reader.ReadToEnd();
+        // todo: serialization settings should be placed separately
+        var timezones = JsonSerializer.Deserialize<List<Timezone>>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        return timezones!;
     }
 
     public override void Dispose()

@@ -12,7 +12,6 @@ Localization
 
 */
 
-using Microsoft.EntityFrameworkCore;
 using NonStop.SitUpStraight.Bot.Db;
 using NonStop.SitUpStraight.Bot.Services;
 using Serilog;
