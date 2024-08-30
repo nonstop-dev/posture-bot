@@ -1,6 +1,8 @@
 using System.Text.Json;
+using NonStop.SitUpStraight.Bot.Helpers;
 using NonStop.SitUpStraight.Bot.Models;
-using NonStop.SitUpStraight.Bot.Services;
+
+namespace NonStop.SitUpStraight.Bot.Services;
 
 public class TimezonesService : ITimezonesService
 {
@@ -18,9 +20,7 @@ public class TimezonesService : ITimezonesService
         // todo: maybe move file name separately
         using var reader = new StreamReader("Data/timezones.json");
         var json = reader.ReadToEnd();
-        // todo: serialization settings should be placed separately
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var timezones = JsonSerializer.Deserialize<List<Timezone>>(json, options);
+        var timezones = JsonSerializer.Deserialize<List<Timezone>>(json, SerializationHelper.JsonSerializerOptions);
         return timezones!;
     }
 }

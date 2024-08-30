@@ -44,17 +44,19 @@ public class SitUpStraightService(
 
             foreach (var s in _subscribers)
             {
-                if (currentHourUtc > s.StartHourUtc && currentHourUtc < s.EndHourUtc)
+                var startHourUtc = s.StartHour - s.Offset;
+                var endHourUtc = s.EndHour - s.Offset;
+                if (currentHourUtc > startHourUtc && currentHourUtc < endHourUtc)
                 {
                     subscribersWithMessages.Add((s, Messages.Message));
                 }
 
-                if (s.StartHourUtc == currentHourUtc)
+                if (startHourUtc == currentHourUtc)
                 {
                     subscribersWithMessages.Add((s, Messages.MorningMessage));
                 }
 
-                if (s.EndHourUtc == currentHourUtc)
+                if (endHourUtc == currentHourUtc)
                 {
                     subscribersWithMessages.Add((s, Messages.EveningMessage));
                 }
@@ -90,69 +92,78 @@ public class SitUpStraightService(
 
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
-        // todo: add try catch
-        var message = update.Message;
-
-        switch (update.Type)
+        try
         {
-            case UpdateType.MyChatMember:
-                if (message is null)
-                {
-                    var memberChatId = update.MyChatMember?.Chat.Id;
-                    if (memberChatId != null)
-                        await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
-                    return;
-                }
-                break;
-            case UpdateType.Message:
-                if (message is null)
-                    return;
-                switch (message.Text)
-                {
-                    case BotCommands.Start:
-                        await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
-                        break;
-                    case BotCommands.SelectTimezone:
-                        var buttons = new List<InlineKeyboardButton[]>();
-                        foreach (var timezone in _timezones)
-                        {
-                            var button = new InlineKeyboardButton[]
-                            {
-                                InlineKeyboardButton.WithCallbackData(timezone.Title, timezone.Offset.ToString())
-                            };
-                            buttons.Add(button);
-                        }
-                        var markup = new InlineKeyboardMarkup(buttons);
-                        await SendMessageAsync(
-                            message.Chat.Id,
-                            BotCommands.SelectTimezone,
-                            markup,
-                            cancellationToken);
-                        break;
-                    case BotCommands.SelectDays:
-                        await SendMessageAsync(
-                            message.Chat.Id,
-                            "Скоро будет, а пока: выпрями спину!",
-                            null,
-                            cancellationToken);
-                        break;
-                    default:
+            var message = update.Message;
+
+            switch (update.Type)
+            {
+                case UpdateType.MyChatMember:
+                    if (message is null)
+                    {
+                        var memberChatId = update.MyChatMember?.Chat.Id;
+                        if (memberChatId != null)
+                            await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
                         return;
-                }
-                break;
-            case UpdateType.CallbackQuery:
-                var callbackQuery = update.CallbackQuery;
-                var chat = callbackQuery.Message.Chat;
-                var offset = int.Parse(callbackQuery.Data!);
+                    }
+                    break;
+                case UpdateType.Message:
+                    if (message is null)
+                        return;
+                    switch (message.Text)
+                    {
+                        case BotCommands.Start:
+                            await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
+                            break;
+                        case BotCommands.SelectTimezone:
+                            var buttons = new List<InlineKeyboardButton[]>();
+                            foreach (var t in _timezones)
+                            {
+                                var data = $"{t.Offset}--{t.Title}";
+                                var button = new InlineKeyboardButton[]
+                                {
+                                    InlineKeyboardButton.WithCallbackData(t.Title, data)
+                                };
+                                buttons.Add(button);
+                            }
+                            var markup = new InlineKeyboardMarkup(buttons);
+                            await SendMessageAsync(
+                                message.Chat.Id,
+                                BotCommands.SelectTimezone,
+                                markup,
+                                cancellationToken);
+                            break;
+                        case BotCommands.SelectDays:
+                            await SendMessageAsync(
+                                message.Chat.Id,
+                                "Скоро будет, а пока: выпрями спину!",
+                                null,
+                                cancellationToken);
+                            break;
+                        default:
+                            return;
+                    }
+                    break;
+                case UpdateType.CallbackQuery:
+                    var callbackQuery = update.CallbackQuery;
+                    await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Свершается магия", cancellationToken: cancellationToken);
+                    var chat = callbackQuery.Message.Chat;
+                    var callbackData = callbackQuery.Data.Split("--");
+                    var offset = int.Parse(callbackData[0]);
+                    var title = callbackData[1];
+                    await UpdateSubscriberTimezone(chat.Id, offset, cancellationToken);
 
-                // await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
-
-                await SendMessageAsync(
-                    chat.Id,
-                    "Скоро будет! А сейчас: выпрями спину!",
-                    null,
-                    cancellationToken);
-                break;
+                    await SendMessageAsync(
+                        chat.Id,
+                        $"Выбрана таймзона: {title}",
+                        null,
+                        cancellationToken);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error occurred while handling update");
         }
     }
 
@@ -247,9 +258,30 @@ public class SitUpStraightService(
         logger.LogInformation("Database migration completed");
     }
 
+    private async Task UpdateSubscriberTimezone(long chatId, int offset, CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+
+        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken: cancellationToken);
+        if (subscriberFromDb == null)
+            return;
+
+        subscriberFromDb.Offset = offset;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Subscriber's timezone has been updated");
+
+        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        if (subscriber != null)
+        {
+            subscriber.Offset = offset;
+        }
+    }
     public override void Dispose()
     {
         _cancellationTokenSource.Cancel();
+        // todo
         // GC.SuppressFinalize(this);
     }
 }
