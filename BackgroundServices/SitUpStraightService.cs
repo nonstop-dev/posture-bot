@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NonStop.SitUpStraight.Bot.Constants;
 using NonStop.SitUpStraight.Bot.Db;
 using NonStop.SitUpStraight.Bot.Models;
 using NonStop.SitUpStraight.Bot.Services;
@@ -17,7 +18,6 @@ public class SitUpStraightService(
     ITimezonesService timezonesService
     ) : BackgroundService, IDisposable
 {
-    private const string Message = "Выпрями спину!";
     private const int TotalMinutesCount = 60;
     private List<Subscriber> _subscribers = [];
     private readonly List<Timezone> _timezones = timezonesService.GetTimezones();
@@ -40,11 +40,28 @@ public class SitUpStraightService(
 
             var currentHourUtc = DateTime.Now.Hour;
 
-            var subscribersToSend = _subscribers.Where(subscriber =>
-                currentHourUtc >= subscriber.StartHourUtc && currentHourUtc <= subscriber.EndHourUtc);
+            List<(Subscriber Subscriber, string Message)> subscribersWithMessages = [];
 
-            var tasks = subscribersToSend.Select(async subscriber =>
-                await SendMessageAsync(subscriber.ChatId, Message, null, _cancellationTokenSource.Token));
+            foreach (var s in _subscribers)
+            {
+                if (currentHourUtc > s.StartHourUtc && currentHourUtc < s.EndHourUtc)
+                {
+                    subscribersWithMessages.Add((s, Messages.Message));
+                }
+
+                if (s.StartHourUtc == currentHourUtc)
+                {
+                    subscribersWithMessages.Add((s, Messages.MorningMessage));
+                }
+
+                if (s.EndHourUtc == currentHourUtc)
+                {
+                    subscribersWithMessages.Add((s, Messages.EveningMessage));
+                }
+            }
+
+            var tasks = subscribersWithMessages.Select(async kv =>
+                await SendMessageAsync(kv.Subscriber.ChatId, kv.Message, null, _cancellationTokenSource.Token));
 
             await Task.WhenAll(tasks);
         }
@@ -147,7 +164,7 @@ public class SitUpStraightService(
 
         await AddSubscriberAsync(chatId, cancellationToken);
 
-        await SendMessageAsync(chatId, Message, null, cancellationToken);
+        await SendMessageAsync(chatId, Messages.Message, null, cancellationToken);
     }
 
     private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)

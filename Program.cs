@@ -2,7 +2,6 @@
 Actions:
 - Send only in work days (customizeble)
 - Add settings for bot to schedule sending (every hour, twice a day)
-- special messages in the morning and at the evening
 - sometimes send special messages
 - Add timezone customization
 - Add metrics: subscribers count

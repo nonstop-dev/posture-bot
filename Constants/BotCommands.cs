@@ -1,4 +1,5 @@
-namespace NonStop.SitUpStraight.Bot.Models;
+namespace NonStop.SitUpStraight.Bot.Constants;
+
 public static class BotCommands
 {
     public const string Start = "/start";
