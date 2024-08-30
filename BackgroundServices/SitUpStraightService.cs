@@ -1,7 +1,7 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NonStop.SitUpStraight.Bot.Db;
 using NonStop.SitUpStraight.Bot.Models;
+using NonStop.SitUpStraight.Bot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -9,16 +9,18 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace NonStop.SitUpStraight.Bot.Services;
+namespace NonStop.SitUpStraight.Bot.BackgroundServices;
 
 public class SitUpStraightService(
     ILogger<SitUpStraightService> logger,
-    IServiceScopeFactory serviceScopeFactory
+    IServiceScopeFactory serviceScopeFactory,
+    ITimezonesService timezonesService
     ) : BackgroundService, IDisposable
 {
     private const string Message = "Выпрями спину!";
     private const int TotalMinutesCount = 60;
     private List<Subscriber> _subscribers = [];
+    private readonly List<Timezone> _timezones = timezonesService.GetTimezones();
     private TelegramBotClient? _botClient;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
@@ -94,9 +96,8 @@ public class SitUpStraightService(
                         await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
                         break;
                     case BotCommands.SelectTimezone:
-                        var timezones1 = LoadTimezones();
                         var buttons = new List<InlineKeyboardButton[]>();
-                        foreach (var timezone in timezones1)
+                        foreach (var timezone in _timezones)
                         {
                             var button = new InlineKeyboardButton[]
                             {
@@ -125,7 +126,6 @@ public class SitUpStraightService(
             case UpdateType.CallbackQuery:
                 var callbackQuery = update.CallbackQuery;
                 var chat = callbackQuery.Message.Chat;
-                var timezones = LoadTimezones();
                 var offset = int.Parse(callbackQuery.Data!);
 
                 // await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
@@ -228,16 +228,6 @@ public class SitUpStraightService(
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
         await dbContext.Database.MigrateAsync(cancellationToken);
         logger.LogInformation("Database migration completed");
-    }
-
-    // todo: use lazy async
-    private List<Timezone> LoadTimezones()
-    {
-        using var reader = new StreamReader("Data/timezones.json");
-        var json = reader.ReadToEnd();
-        // todo: serialization settings should be placed separately
-        var timezones = JsonSerializer.Deserialize<List<Timezone>>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        return timezones!;
     }
 
     public override void Dispose()
