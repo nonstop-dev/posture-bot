@@ -22,7 +22,6 @@ public class SitUpStraightService(
 {
     private const int TotalMinutesCount = 60;
     private List<Subscriber> _subscribers = [];
-    private readonly List<Timezone> _timezones = timezonesService.GetTimezones();
     private TelegramBotClient? _botClient;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
@@ -156,19 +155,19 @@ public class SitUpStraightService(
                     var command = callbackData[0];
                     switch (command)
                     {
-                        case BotCommands.SelectTimezone:
-                            var offset = int.Parse(callbackData[1]);
-                            var title = callbackData[2];
-                            await UpdateSubscriberTimezone(chat.Id, offset, cancellationToken);
+                        case MarkupCommands.Timezone:
+                            var id = int.Parse(callbackData[1]);
+                            var timezone = timezonesService.GetTimezone(id);
+                            await UpdateSubscriberTimezone(chat.Id, timezone.Offset, cancellationToken);
 
                             await SendMessageAsync(
                                 chat.Id,
-                                $"Выбрана таймзона: {title}",
+                                $"Выбрана таймзона: {timezone.Title}",
                                 null,
                                 cancellationToken);
                             break;
-                        case BotCommands.SelectHours:
-                            if (callbackData[0] == "custom")
+                        case MarkupCommands.Hours:
+                            if (callbackData[1] == "custom")
                             {
                                 await SendMessageAsync(
                                     chat.Id,
@@ -185,6 +184,12 @@ public class SitUpStraightService(
                                 var startHourUtc = TimeHelper.GetStartHourUtc(userStartHour, subscriber.Offset);
                                 var endHourUtc = TimeHelper.GetEndHourUtc(userEndHour, subscriber.Offset);
                                 await UpdateSubscriberHours(chat.Id, startHourUtc, endHourUtc, cancellationToken);
+
+                                await SendMessageAsync(
+                                    chat.Id,
+                                    $"Выбрано время с {userStartHour} по {userEndHour}",
+                                    null,
+                                    cancellationToken);
                             }
                             break;
                     }

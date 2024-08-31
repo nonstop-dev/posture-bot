@@ -24,7 +24,7 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
 
         foreach (var t in timezones)
         {
-            var data = $"{BotCommands.SelectTimezone}--{t.Offset}--{t.Title}";
+            var data = $"{MarkupCommands.Timezone}--{t.Id}";
             var button = new InlineKeyboardButton[]
             {
                 InlineKeyboardButton.WithCallbackData(t.Title, data)
@@ -38,7 +38,7 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
 
     public InlineKeyboardMarkup GetHoursMarkup()
     {
-        var command = BotCommands.SelectHours;
+        var command = MarkupCommands.Hours;
         var buttons = new List<InlineKeyboardButton[]>
         {
             new InlineKeyboardButton[]

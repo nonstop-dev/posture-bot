@@ -15,6 +15,8 @@ public class TimezonesService : ITimezonesService
 
     public List<Timezone> GetTimezones() => _timezones.Value;
 
+    public Timezone GetTimezone(int id) => _timezones.Value.First(t => t.Id == id);
+
     private List<Timezone> InitTimezones()
     {
         // todo: maybe move file name separately
