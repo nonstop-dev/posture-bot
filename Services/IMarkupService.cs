@@ -7,4 +7,5 @@ public interface IMarkupService
     ReplyKeyboardMarkup GetDefaultMarkup();
     InlineKeyboardMarkup GetTimezonesMarkup();
     InlineKeyboardMarkup GetHoursMarkup();
+    InlineKeyboardMarkup GetDaysMarkup();
 }

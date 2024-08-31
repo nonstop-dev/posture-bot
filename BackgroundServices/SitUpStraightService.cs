@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NonStop.SitUpStraight.Bot.Constants;
 using NonStop.SitUpStraight.Bot.Db;
+using NonStop.SitUpStraight.Bot.Extensions;
 using NonStop.SitUpStraight.Bot.Helpers;
 using NonStop.SitUpStraight.Bot.Models;
 using NonStop.SitUpStraight.Bot.Services;
@@ -32,6 +33,7 @@ public class SitUpStraightService(
         await RestoreSubscribersAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
+            // todo: delete this log
             logger.LogInformation("Worker: {Count}", _subscribers.Count);
             var minutes = TotalMinutesCount - DateTime.UtcNow.Minute;
             var delay = (minutes * 60) - DateTime.UtcNow.Second;
@@ -40,14 +42,16 @@ public class SitUpStraightService(
             if (_subscribers.Count == 0)
                 continue;
 
-            var currentHourUtc = DateTime.Now.Hour;
-
+            var now = DateTime.UtcNow;
+            var currentHourUtc = now.Hour;
             List<(Subscriber Subscriber, string Message)> subscribersWithMessages = [];
-            
+
             foreach (var s in _subscribers)
             {
-                // todo: improve it might be negative
-                logger.LogInformation("Subscriber: {@Subscriber}", s);
+                var dayNumber = now.DayOfWeek.ToDayNumber();
+                if (dayNumber > s.DaysPerWeek)
+                    continue;
+
                 var startHourUtc = s.StartHourUtc;
                 var endHourUtc = s.EndHourUtc;
                 if (currentHourUtc > startHourUtc && currentHourUtc < endHourUtc)
@@ -128,10 +132,11 @@ public class SitUpStraightService(
                                 cancellationToken);
                             break;
                         case BotCommands.SelectDays:
+                            var daysMarkup = markupService.GetDaysMarkup();
                             await SendMessageAsync(
                                 message.Chat.Id,
-                                "Скоро будет, а пока: выпрями спину!",
-                                null,
+                                BotCommands.SelectDays,
+                                daysMarkup,
                                 cancellationToken);
                             break;
                         case BotCommands.SelectHours:
@@ -166,12 +171,21 @@ public class SitUpStraightService(
                                 null,
                                 cancellationToken);
                             break;
+                        case MarkupCommands.Days:
+                            var daysPerWeek = int.Parse(callbackData[1]);
+                            await UpdateSubscriberDaysAsync(chat.Id, daysPerWeek, cancellationToken);
+                            await SendMessageAsync(
+                                chat.Id,
+                                $"Ровная спина будет {daysPerWeek} дней в неделю",
+                                null,
+                                cancellationToken);
+                            break;
                         case MarkupCommands.Hours:
                             if (callbackData[1] == "custom")
                             {
                                 await SendMessageAsync(
                                     chat.Id,
-                                    $"Скоро будет можно. А пока: выпрями спину!",
+                                    $"Скоро будет. А пока: выпрями спину!",
                                     null,
                                     cancellationToken);
                                 // todo: customize
@@ -286,7 +300,7 @@ public class SitUpStraightService(
         using var scope = serviceScopeFactory.CreateScope();
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
 
-        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken: cancellationToken);
+        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken);
         if (subscriberFromDb == null)
             return;
 
@@ -307,7 +321,7 @@ public class SitUpStraightService(
         using var scope = serviceScopeFactory.CreateScope();
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
 
-        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken: cancellationToken);
+        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken);
         if (subscriberFromDb == null)
             return;
 
@@ -322,6 +336,26 @@ public class SitUpStraightService(
         {
             subscriber.StartHourUtc = startHourUtc;
             subscriber.EndHourUtc = endHourUtc;
+        }
+    }
+
+    private async Task UpdateSubscriberDaysAsync(long chatId, int daysPerWeek, CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+
+        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken);
+        if (subscriberFromDb == null)
+            return;
+
+        subscriberFromDb.DaysPerWeek = daysPerWeek;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Subscriber's days per week has been updated");
+
+        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        if (subscriber != null)
+        {
+            subscriber.DaysPerWeek = daysPerWeek;
         }
     }
 

@@ -1,10 +1,9 @@
 ﻿/*
 Actions:
-- Send only in work days (customizeble)
 - delete my logs
 - feedback form
 - sending a quick message to bot
-- delete cache
+- delete cache (?)
 - customize start and end hour for sending
 - sometimes send special messages
 - Add timezone customization

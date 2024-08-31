@@ -61,4 +61,28 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
 
         return markup;
     }
+
+    public InlineKeyboardMarkup GetDaysMarkup()
+    {
+        var command = MarkupCommands.Days;
+        var buttons = new List<InlineKeyboardButton[]>
+        {
+            new InlineKeyboardButton[]
+            {
+                InlineKeyboardButton.WithCallbackData("ПН-ПТ", $"{command}--5"),
+            },
+            new InlineKeyboardButton[]
+            {
+                InlineKeyboardButton.WithCallbackData("ПН-СБ", $"{command}--6")
+            },
+            new InlineKeyboardButton[]
+            {
+                InlineKeyboardButton.WithCallbackData("ПН-ВС", $"{command}--7")
+            }
+        };
+
+        var markup = new InlineKeyboardMarkup(buttons);
+
+        return markup;
+    }
 }

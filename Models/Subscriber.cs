@@ -9,4 +9,5 @@ public class Subscriber
     public int StartHourUtc { get; set; } = 9;
     public int EndHourUtc { get; set;} = 21;
     public int Offset { get; set; } = 3;
+    public int DaysPerWeek { get; set; } = 7;
 }
