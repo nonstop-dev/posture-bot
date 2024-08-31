@@ -1,7 +1,8 @@
 ﻿/*
 Actions:
 - Send only in work days (customizeble)
-- Add settings for bot to schedule sending (every hour, twice a day)
+- delete cache
+- customize start and end hour for sending
 - sometimes send special messages
 - Add timezone customization
 - Add metrics: subscribers count
@@ -23,6 +24,7 @@ builder.Services.AddSerilog();
 builder.Services.AddHostedService<SitUpStraightService>();
 builder.Services.AddDbContext<SitUpStraightDbContext>();
 builder.Services.AddSingleton<ITimezonesService, TimezonesService>();
+builder.Services.AddSingleton<IMarkupService, MarkupService>();
 var app = builder.Build();
 
 app.Run();

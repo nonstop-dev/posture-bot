@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NonStop.SitUpStraight.Bot.Constants;
 using NonStop.SitUpStraight.Bot.Db;
+using NonStop.SitUpStraight.Bot.Helpers;
 using NonStop.SitUpStraight.Bot.Models;
 using NonStop.SitUpStraight.Bot.Services;
 using Telegram.Bot;
@@ -15,7 +16,8 @@ namespace NonStop.SitUpStraight.Bot.BackgroundServices;
 public class SitUpStraightService(
     ILogger<SitUpStraightService> logger,
     IServiceScopeFactory serviceScopeFactory,
-    ITimezonesService timezonesService
+    ITimezonesService timezonesService,
+    IMarkupService markupService
     ) : BackgroundService, IDisposable
 {
     private const int TotalMinutesCount = 60;
@@ -47,8 +49,8 @@ public class SitUpStraightService(
             {
                 // todo: improve it might be negative
                 logger.LogInformation("Subscriber: {@Subscriber}", s);
-                var startHourUtc = s.StartHour - s.Offset;
-                var endHourUtc = s.EndHour - s.Offset;
+                var startHourUtc = s.StartHourUtc;
+                var endHourUtc = s.EndHourUtc;
                 if (currentHourUtc > startHourUtc && currentHourUtc < endHourUtc)
                 {
                     subscribersWithMessages.Add((s, Messages.Message));
@@ -119,21 +121,11 @@ public class SitUpStraightService(
                             await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
                             break;
                         case BotCommands.SelectTimezone:
-                            var buttons = new List<InlineKeyboardButton[]>();
-                            foreach (var t in _timezones)
-                            {
-                                var data = $"{t.Offset}--{t.Title}";
-                                var button = new InlineKeyboardButton[]
-                                {
-                                    InlineKeyboardButton.WithCallbackData(t.Title, data)
-                                };
-                                buttons.Add(button);
-                            }
-                            var markup = new InlineKeyboardMarkup(buttons);
+                            var timezonesMarkup = markupService.GetTimezonesMarkup();
                             await SendMessageAsync(
                                 message.Chat.Id,
                                 BotCommands.SelectTimezone,
-                                markup,
+                                timezonesMarkup,
                                 cancellationToken);
                             break;
                         case BotCommands.SelectDays:
@@ -143,6 +135,14 @@ public class SitUpStraightService(
                                 null,
                                 cancellationToken);
                             break;
+                        case BotCommands.SelectHours:
+                            var hoursMarkup = markupService.GetHoursMarkup();
+                            await SendMessageAsync(
+                                message.Chat.Id,
+                                BotCommands.SelectHours,
+                                hoursMarkup,
+                                cancellationToken);
+                            break;
                         default:
                             return;
                     }
@@ -150,17 +150,44 @@ public class SitUpStraightService(
                 case UpdateType.CallbackQuery:
                     var callbackQuery = update.CallbackQuery;
                     await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Свершается магия", cancellationToken: cancellationToken);
+
                     var chat = callbackQuery.Message.Chat;
                     var callbackData = callbackQuery.Data.Split("--");
-                    var offset = int.Parse(callbackData[0]);
-                    var title = callbackData[1];
-                    await UpdateSubscriberTimezone(chat.Id, offset, cancellationToken);
+                    var command = callbackData[0];
+                    switch (command)
+                    {
+                        case BotCommands.SelectTimezone:
+                            var offset = int.Parse(callbackData[1]);
+                            var title = callbackData[2];
+                            await UpdateSubscriberTimezone(chat.Id, offset, cancellationToken);
 
-                    await SendMessageAsync(
-                        chat.Id,
-                        $"Выбрана таймзона: {title}",
-                        null,
-                        cancellationToken);
+                            await SendMessageAsync(
+                                chat.Id,
+                                $"Выбрана таймзона: {title}",
+                                null,
+                                cancellationToken);
+                            break;
+                        case BotCommands.SelectHours:
+                            if (callbackData[0] == "custom")
+                            {
+                                await SendMessageAsync(
+                                    chat.Id,
+                                    $"Скоро будет можно. А пока: выпрями спину!",
+                                    null,
+                                    cancellationToken);
+                                // todo: customize
+                            }
+                            else
+                            {
+                                var userStartHour = int.Parse(callbackData[1]);
+                                var userEndHour = int.Parse(callbackData[2]);
+                                var subscriber = _subscribers.First(x => x.ChatId == chat.Id);
+                                var startHourUtc = TimeHelper.GetStartHourUtc(userStartHour, subscriber.Offset);
+                                var endHourUtc = TimeHelper.GetEndHourUtc(userEndHour, subscriber.Offset);
+                                await UpdateSubscriberHours(chat.Id, startHourUtc, endHourUtc, cancellationToken);
+                            }
+                            break;
+                    }
                     break;
             }
         }
@@ -183,19 +210,7 @@ public class SitUpStraightService(
 
     private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
     {
-        if (replyMarkup == null)
-        {
-            replyMarkup = new ReplyKeyboardMarkup(
-            new List<KeyboardButton[]>()
-            {
-                new KeyboardButton[]
-                {
-                    new(BotCommands.SelectTimezone),
-                    new(BotCommands.SelectDays)
-                }
-            })
-            { ResizeKeyboard = true };
-        }
+        replyMarkup ??= markupService.GetDefaultMarkup();
         await _botClient!.SendTextMessageAsync(chatId, message, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
     }
 
@@ -281,6 +296,30 @@ public class SitUpStraightService(
             subscriber.Offset = offset;
         }
     }
+
+    private async Task UpdateSubscriberHours(long chatId, int startHourUtc, int endHourUtc, CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+
+        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken: cancellationToken);
+        if (subscriberFromDb == null)
+            return;
+
+        subscriberFromDb.StartHourUtc = startHourUtc;
+        subscriberFromDb.EndHourUtc = endHourUtc;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Subscriber's hours has been updated");
+
+        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        if (subscriber != null)
+        {
+            subscriber.StartHourUtc = startHourUtc;
+            subscriber.EndHourUtc = endHourUtc;
+        }
+    }
+
     public override void Dispose()
     {
         _cancellationTokenSource.Cancel();
