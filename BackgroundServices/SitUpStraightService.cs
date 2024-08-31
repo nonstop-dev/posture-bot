@@ -31,6 +31,7 @@ public class SitUpStraightService(
         await RestoreSubscribersAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
+            logger.LogInformation("Worker: {Count}", _subscribers.Count);
             var minutes = TotalMinutesCount - DateTime.UtcNow.Minute;
             var delay = (minutes * 60) - DateTime.UtcNow.Second;
             await Task.Delay(TimeSpan.FromSeconds(delay), stoppingToken);
@@ -41,10 +42,11 @@ public class SitUpStraightService(
             var currentHourUtc = DateTime.Now.Hour;
 
             List<(Subscriber Subscriber, string Message)> subscribersWithMessages = [];
-
+            
             foreach (var s in _subscribers)
             {
                 // todo: improve it might be negative
+                logger.LogInformation("Subscriber: {@Subscriber}", s);
                 var startHourUtc = s.StartHour - s.Offset;
                 var endHourUtc = s.EndHour - s.Offset;
                 if (currentHourUtc > startHourUtc && currentHourUtc < endHourUtc)
@@ -65,6 +67,8 @@ public class SitUpStraightService(
                 await SendMessageAsync(kv.Subscriber.ChatId, kv.Message, null, _cancellationTokenSource.Token));
 
             await Task.WhenAll(tasks);
+
+            logger.LogInformation("Worker: All messages sent");
         }
     }
 
