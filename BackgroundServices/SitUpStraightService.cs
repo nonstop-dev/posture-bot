@@ -44,19 +44,18 @@ public class SitUpStraightService(
 
             foreach (var s in _subscribers)
             {
+                // todo: improve it might be negative
                 var startHourUtc = s.StartHour - s.Offset;
                 var endHourUtc = s.EndHour - s.Offset;
                 if (currentHourUtc > startHourUtc && currentHourUtc < endHourUtc)
                 {
                     subscribersWithMessages.Add((s, Messages.Message));
                 }
-
-                if (startHourUtc == currentHourUtc)
+                else if (startHourUtc == currentHourUtc)
                 {
                     subscribersWithMessages.Add((s, Messages.MorningMessage));
                 }
-
-                if (endHourUtc == currentHourUtc)
+                else if (endHourUtc == currentHourUtc)
                 {
                     subscribersWithMessages.Add((s, Messages.EveningMessage));
                 }
