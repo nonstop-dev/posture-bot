@@ -5,23 +5,25 @@ public static class TimeHelper
     private const int FirstHour = 1;
     private const int LastHour = 24;
 
-    public static int GetStartHourUtc(int userStartHour, int offset)
+    public static readonly Dictionary<int, string> DaysMap = new() {
+        { 5, "ПН-ПТ" },
+        { 6, "ПН-СБ" },
+        { 7, "ПН-ВС" }
+    };
+
+    public static int GetHourUtc(int hourLocal, int offset) => RoundHourIfNeed(hourLocal - offset);
+
+    public static int GetHourLocal(int hourUtc, int offset) => RoundHourIfNeed(hourUtc + offset);
+
+    private static int RoundHourIfNeed(int hour)
     {
-        var hour = userStartHour - offset;
         if (hour < FirstHour)
         {
-            hour = LastHour + hour;
+            hour += LastHour;
         }
-
-        return hour;
-    }
-
-    public static int GetEndHourUtc(int userEndHour, int offset)
-    {
-        var hour = userEndHour - offset;
         if (hour >= LastHour)
         {
-            hour = hour - LastHour;
+            hour -= LastHour;
         }
 
         return hour;

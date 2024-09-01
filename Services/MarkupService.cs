@@ -13,6 +13,10 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
                     new(BotCommands.SelectTimezone),
                     new(BotCommands.SelectDays),
                     new(BotCommands.SelectHours)
+                },
+                new KeyboardButton[]
+                {
+                    new(BotCommands.MySettings)
                 }
             })
     { ResizeKeyboard = true };

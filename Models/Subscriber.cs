@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using NonStop.SitUpStraight.Bot.Helpers;
 
 namespace NonStop.SitUpStraight.Bot.Models;
 

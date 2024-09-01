@@ -147,6 +147,26 @@ public class SitUpStraightService(
                                 hoursMarkup,
                                 cancellationToken);
                             break;
+                        case BotCommands.MySettings:
+                            var subscriber = _subscribers.First(s => s.ChatId == message.Chat.Id);
+                            // todo: find more correct way to find timezone
+                            var timezones = timezonesService.GetTimezones();
+                            var timezone = timezones.First(t => t.Offset == subscriber.Offset);
+
+                            var info = SettingsHelper.GetSettingsInfo(
+                                subscriber.StartHourUtc,
+                                subscriber.EndHourUtc,
+                                subscriber.Offset,
+                                timezone.Title,
+                                subscriber.DaysPerWeek);
+
+                            await SendMessageAsync(
+                                message.Chat.Id,
+                                info,
+                                null,
+                                cancellationToken
+                            );
+                            break;
                         default:
                             return;
                     }
@@ -195,8 +215,8 @@ public class SitUpStraightService(
                                 var userStartHour = int.Parse(callbackData[1]);
                                 var userEndHour = int.Parse(callbackData[2]);
                                 var subscriber = _subscribers.First(x => x.ChatId == chat.Id);
-                                var startHourUtc = TimeHelper.GetStartHourUtc(userStartHour, subscriber.Offset);
-                                var endHourUtc = TimeHelper.GetEndHourUtc(userEndHour, subscriber.Offset);
+                                var startHourUtc = TimeHelper.GetHourUtc(userStartHour, subscriber.Offset);
+                                var endHourUtc = TimeHelper.GetHourUtc(userEndHour, subscriber.Offset);
                                 await UpdateSubscriberHours(chat.Id, startHourUtc, endHourUtc, cancellationToken);
 
                                 await SendMessageAsync(
@@ -316,7 +336,7 @@ public class SitUpStraightService(
         if (currentOffset > offset)
         {
             startHourUtc += offsetDiff;
-            endHourUtc += offset;
+            endHourUtc += offsetDiff;
         }
 
         subscriberFromDb.Offset = offset;
