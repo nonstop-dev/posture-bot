@@ -304,8 +304,24 @@ public class SitUpStraightService(
         if (subscriberFromDb == null)
             return;
 
-        subscriberFromDb.Offset = offset;
+        var currentOffset = subscriberFromDb.Offset;
+        var offsetDiff = Math.Abs(offset - currentOffset);
+        var startHourUtc = subscriberFromDb.StartHourUtc;
+        var endHourUtc = subscriberFromDb.EndHourUtc;
+        if (currentOffset < offset)
+        {
+            startHourUtc -= offsetDiff;
+            endHourUtc -= offsetDiff;
+        }
+        if (currentOffset > offset)
+        {
+            startHourUtc += offsetDiff;
+            endHourUtc += offset;
+        }
 
+        subscriberFromDb.Offset = offset;
+        subscriberFromDb.StartHourUtc = startHourUtc;
+        subscriberFromDb.EndHourUtc = endHourUtc;
         await dbContext.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Subscriber's timezone has been updated");
 
@@ -313,6 +329,8 @@ public class SitUpStraightService(
         if (subscriber != null)
         {
             subscriber.Offset = offset;
+            subscriber.StartHourUtc = startHourUtc;
+            subscriber.EndHourUtc = endHourUtc;
         }
     }
 
