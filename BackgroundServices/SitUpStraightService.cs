@@ -29,7 +29,7 @@ public class SitUpStraightService(
     protected async override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await EnsureDatabaseCreatedAndMigrated(stoppingToken);
-        InitializeBotClient();
+        await InitializeBotClientAsync(stoppingToken);
         await RestoreSubscribersAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -77,7 +77,7 @@ public class SitUpStraightService(
         }
     }
 
-    private void InitializeBotClient()
+    private async Task InitializeBotClientAsync(CancellationToken cancellationToken)
     {
         // todo: take from settings
         _botClient = new TelegramBotClient("242464316:AAFxxhWAurba-hw526Uo6TxjO7WS8B7PIio");
@@ -94,6 +94,8 @@ public class SitUpStraightService(
             receiverOptions: receiverOptions,
             cancellationToken: _cancellationTokenSource.Token
         );
+
+        await _botClient.SetMyDescriptionAsync("Выровняю спину даже верблюду!");
 
         logger.LogInformation("Bot initialized");
     }
