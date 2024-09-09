@@ -15,7 +15,7 @@ public static class TimeHelper
 
     public static int GetHourLocal(int hourUtc, int offset) => RoundHourIfNeed(hourUtc + offset);
 
-    private static int RoundHourIfNeed(int hour)
+    public static int RoundHourIfNeed(int hour)
     {
         if (hour < FirstHour)
         {

@@ -330,13 +330,13 @@ public class SitUpStraightService(
         var endHourUtc = subscriberFromDb.EndHourUtc;
         if (currentOffset < offset)
         {
-            startHourUtc -= offsetDiff;
-            endHourUtc -= offsetDiff;
+            startHourUtc = TimeHelper.RoundHourIfNeed(startHourUtc - offsetDiff);
+            endHourUtc = TimeHelper.RoundHourIfNeed(endHourUtc - offsetDiff);
         }
         if (currentOffset > offset)
         {
-            startHourUtc += offsetDiff;
-            endHourUtc += offsetDiff;
+            startHourUtc = TimeHelper.RoundHourIfNeed(startHourUtc + offsetDiff);
+            endHourUtc = TimeHelper.RoundHourIfNeed(endHourUtc + offsetDiff);
         }
 
         subscriberFromDb.Offset = offset;
