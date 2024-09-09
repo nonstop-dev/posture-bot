@@ -95,7 +95,7 @@ public class SitUpStraightService(
             cancellationToken: _cancellationTokenSource.Token
         );
 
-        await _botClient.SetMyDescriptionAsync("Выровняю спину даже верблюду!");
+        await _botClient.SetMyDescriptionAsync("Выровняю спину даже верблюду!", cancellationToken: cancellationToken);
 
         logger.LogInformation("Bot initialized");
     }
