@@ -100,142 +100,77 @@ public class SitUpStraightService(
         logger.LogInformation("Bot initialized");
     }
 
-    private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+    private async Task HandleUpdateAsync(ITelegramBotClient _, Update update, CancellationToken cancellationToken)
     {
         try
         {
-            var message = update.Message;
-
-            switch (update.Type)
+            await (update switch
             {
-                case UpdateType.MyChatMember:
-                    if (message is null)
-                    {
-                        var memberChatId = update.MyChatMember?.Chat.Id;
-                        if (memberChatId != null)
-                            await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
-                        return;
-                    }
-                    break;
-                case UpdateType.Message:
-                    if (message is null)
-                        return;
-                    switch (message.Text)
-                    {
-                        case BotCommands.Start:
-                            await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
-                            break;
-                        case BotCommands.SelectTimezone:
-                            var timezonesMarkup = markupService.GetTimezonesMarkup();
-                            await SendMessageAsync(
-                                message.Chat.Id,
-                                BotCommands.SelectTimezone,
-                                timezonesMarkup,
-                                cancellationToken);
-                            break;
-                        case BotCommands.SelectDays:
-                            var daysMarkup = markupService.GetDaysMarkup();
-                            await SendMessageAsync(
-                                message.Chat.Id,
-                                BotCommands.SelectDays,
-                                daysMarkup,
-                                cancellationToken);
-                            break;
-                        case BotCommands.SelectHours:
-                            var hoursMarkup = markupService.GetHoursMarkup();
-                            await SendMessageAsync(
-                                message.Chat.Id,
-                                BotCommands.SelectHours,
-                                hoursMarkup,
-                                cancellationToken);
-                            break;
-                        case BotCommands.MySettings:
-                            var subscriber = _subscribers.First(s => s.ChatId == message.Chat.Id);
-                            // todo: find more correct way to find timezone
-                            var timezones = timezonesService.GetTimezones();
-                            var timezone = timezones.First(t => t.Offset == subscriber.Offset);
-
-                            var info = SettingsHelper.GetSettingsInfo(
-                                subscriber.StartHourUtc,
-                                subscriber.EndHourUtc,
-                                subscriber.Offset,
-                                timezone.Title,
-                                subscriber.DaysPerWeek);
-
-                            await SendMessageAsync(
-                                message.Chat.Id,
-                                info,
-                                null,
-                                cancellationToken
-                            );
-                            break;
-                        default:
-                            return;
-                    }
-                    break;
-                case UpdateType.CallbackQuery:
-                    var callbackQuery = update.CallbackQuery;
-                    await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Свершается магия", cancellationToken: cancellationToken);
-
-                    var chat = callbackQuery.Message.Chat;
-                    var callbackData = callbackQuery.Data.Split("--");
-                    var command = callbackData[0];
-                    switch (command)
-                    {
-                        case MarkupCommands.Timezone:
-                            var id = int.Parse(callbackData[1]);
-                            var timezone = timezonesService.GetTimezone(id);
-                            await UpdateSubscriberTimezone(chat.Id, timezone.Offset, cancellationToken);
-
-                            await SendMessageAsync(
-                                chat.Id,
-                                $"Выбрана таймзона: {timezone.Title}",
-                                null,
-                                cancellationToken);
-                            break;
-                        case MarkupCommands.Days:
-                            var daysPerWeek = int.Parse(callbackData[1]);
-                            await UpdateSubscriberDaysAsync(chat.Id, daysPerWeek, cancellationToken);
-                            await SendMessageAsync(
-                                chat.Id,
-                                $"Ровная спина будет {daysPerWeek} дней в неделю",
-                                null,
-                                cancellationToken);
-                            break;
-                        case MarkupCommands.Hours:
-                            if (callbackData[1] == "custom")
-                            {
-                                await SendMessageAsync(
-                                    chat.Id,
-                                    $"Скоро будет. А пока: выпрями спину!",
-                                    null,
-                                    cancellationToken);
-                                // todo: customize
-                            }
-                            else
-                            {
-                                var userStartHour = int.Parse(callbackData[1]);
-                                var userEndHour = int.Parse(callbackData[2]);
-                                var subscriber = _subscribers.First(x => x.ChatId == chat.Id);
-                                var startHourUtc = TimeHelper.GetHourUtc(userStartHour, subscriber.Offset);
-                                var endHourUtc = TimeHelper.GetHourUtc(userEndHour, subscriber.Offset);
-                                await UpdateSubscriberHours(chat.Id, startHourUtc, endHourUtc, cancellationToken);
-
-                                await SendMessageAsync(
-                                    chat.Id,
-                                    $"Выбрано время с {userStartHour} по {userEndHour}",
-                                    null,
-                                    cancellationToken);
-                            }
-                            break;
-                    }
-                    break;
-            }
+                { Message: { } message } => OnMessageAsync(message, cancellationToken),
+                { CallbackQuery: { } callbackQuery } => OnCallbackQueryAsync(callbackQuery, cancellationToken),
+                { MyChatMember: { } myChatMember } => OnMyChatMemberAsync(myChatMember, cancellationToken),
+                _ => Task.CompletedTask
+            });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error occurred while handling update");
         }
+    }
+
+    private async Task OnMessageAsync(Message message, CancellationToken cancellationToken)
+    {
+        if (message is null)
+            return;
+        switch (message.Text)
+        {
+            case BotCommands.Start:
+                await HandleStartCommandAsync(message.Chat.Id, cancellationToken);
+                break;
+            case BotCommands.SelectTimezone:
+                await HandleSelectTimezoneCommandAsync(message.Chat.Id, cancellationToken);
+                break;
+            case BotCommands.SelectDays:
+                await HandleSelectDaysCommandAsync(message.Chat.Id, cancellationToken);
+                break;
+            case BotCommands.SelectHours:
+                await HandleSelectHoursCommandAsync(message.Chat.Id, cancellationToken);
+                break;
+            case BotCommands.MySettings:
+                await HandleMySettingsCommandAsync(message.Chat.Id, cancellationToken);
+                break;
+            default:
+                return;
+        }
+    }
+
+    private async Task OnCallbackQueryAsync(CallbackQuery callbackQuery, CancellationToken cancellationToken)
+    {
+        await _botClient!.AnswerCallbackQueryAsync(callbackQuery.Id, "Свершается магия", cancellationToken: cancellationToken);
+
+        var chat = callbackQuery.Message.Chat;
+        var callbackData = callbackQuery.Data.Split("--");
+        var command = callbackData[0];
+        switch (command)
+        {
+            case MarkupCommands.Timezone:
+                await HandleTimezoneCallbackQueryAsync(chat.Id, callbackData[1], cancellationToken);
+                break;
+            case MarkupCommands.Days:
+                await HandleDaysCallbackQueryAsync(chat.Id, callbackData[1], cancellationToken);
+                break;
+            case MarkupCommands.Hours:
+                string[] data = [callbackData[1], callbackData[2]];
+                await HandleHoursCallbackQueryAsync(chat.Id, data, cancellationToken);
+                break;
+        }
+    }
+
+    private async Task OnMyChatMemberAsync(ChatMemberUpdated myChatMember, CancellationToken cancellationToken)
+    {
+        var memberChatId = myChatMember?.Chat.Id;
+        if (memberChatId != null)
+            await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
     }
 
     private async Task HandleStartCommandAsync(long chatId, CancellationToken cancellationToken)
@@ -247,6 +182,110 @@ public class SitUpStraightService(
         await AddSubscriberAsync(chatId, cancellationToken);
 
         await SendMessageAsync(chatId, Messages.Message, null, cancellationToken);
+    }
+
+    private async Task HandleSelectTimezoneCommandAsync(long chatId, CancellationToken cancellationToken)
+    {
+        var timezonesMarkup = markupService.GetTimezonesMarkup();
+        await SendMessageAsync(
+            chatId,
+            BotCommands.SelectTimezone,
+            timezonesMarkup,
+            cancellationToken);
+    }
+
+    private async Task HandleSelectDaysCommandAsync(long chatId, CancellationToken cancellationToken)
+    {
+        var daysMarkup = markupService.GetDaysMarkup();
+        await SendMessageAsync(
+            chatId,
+            BotCommands.SelectDays,
+            daysMarkup,
+            cancellationToken);
+    }
+
+    private async Task HandleSelectHoursCommandAsync(long chatId, CancellationToken cancellationToken)
+    {
+        var hoursMarkup = markupService.GetHoursMarkup();
+        await SendMessageAsync(
+            chatId,
+            BotCommands.SelectHours,
+            hoursMarkup,
+            cancellationToken);
+    }
+
+    private async Task HandleMySettingsCommandAsync(long chatId, CancellationToken cancellationToken)
+    {
+        var subscriber = _subscribers.First(s => s.ChatId == chatId);
+        // todo: find more correct way to find timezone
+        var timezones = timezonesService.GetTimezones();
+        var timezone = timezones.First(t => t.Offset == subscriber.Offset);
+
+        var info = SettingsHelper.GetSettingsInfo(
+            subscriber.StartHourUtc,
+            subscriber.EndHourUtc,
+            subscriber.Offset,
+            timezone.Title,
+            subscriber.DaysPerWeek);
+
+        await SendMessageAsync(
+            chatId,
+            info,
+            null,
+            cancellationToken
+        );
+    }
+
+    private async Task HandleTimezoneCallbackQueryAsync(long chatId, string timezoneId, CancellationToken cancellationToken)
+    {
+        var id = int.Parse(timezoneId);
+        var timezone = timezonesService.GetTimezone(id);
+        await UpdateSubscriberTimezone(chatId, timezone.Offset, cancellationToken);
+
+        await SendMessageAsync(
+            chatId,
+            $"Выбрана таймзона: {timezone.Title}",
+            null,
+            cancellationToken);
+    }
+
+    private async Task HandleDaysCallbackQueryAsync(long chatId, string day, CancellationToken cancellationToken)
+    {
+        var daysPerWeek = int.Parse(day);
+        await UpdateSubscriberDaysAsync(chatId, daysPerWeek, cancellationToken);
+        await SendMessageAsync(
+            chatId,
+            $"Ровная спина будет {daysPerWeek} дней в неделю",
+            null,
+            cancellationToken);
+    }
+
+    private async Task HandleHoursCallbackQueryAsync(long chatId, string[] callbackData, CancellationToken cancellationToken)
+    {
+        if (callbackData[0] == "custom")
+        {
+            await SendMessageAsync(
+                chatId,
+                $"Скоро будет. А пока: выпрями спину!",
+                null,
+                cancellationToken);
+            // todo: customize
+        }
+        else
+        {
+            var userStartHour = int.Parse(callbackData[0]);
+            var userEndHour = int.Parse(callbackData[1]);
+            var subscriber = _subscribers.First(x => x.ChatId == chatId);
+            var startHourUtc = TimeHelper.GetHourUtc(userStartHour, subscriber.Offset);
+            var endHourUtc = TimeHelper.GetHourUtc(userEndHour, subscriber.Offset);
+            await UpdateSubscriberHours(chatId, startHourUtc, endHourUtc, cancellationToken);
+
+            await SendMessageAsync(
+                chatId,
+                $"Выбрано время с {userStartHour} по {userEndHour}",
+                null,
+                cancellationToken);
+        }
     }
 
     private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
