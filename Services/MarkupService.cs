@@ -57,7 +57,7 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
             },
             new InlineKeyboardButton[]
             {
-                InlineKeyboardButton.WithCallbackData("Настроить", $"{command}--custom")
+                InlineKeyboardButton.WithCallbackData("Настроить", $"{command}--custom--0")
             }
         };
 

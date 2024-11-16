@@ -11,4 +11,5 @@ public class Subscriber
     public int EndHourUtc { get; set;} = 21;
     public int Offset { get; set; } = 3;
     public int DaysPerWeek { get; set; } = 7;
+    public bool Configured { get; set; }
 }

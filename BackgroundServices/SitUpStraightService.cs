@@ -69,7 +69,7 @@ public class SitUpStraightService(
             }
 
             var tasks = subscribersWithMessages.Select(async kv =>
-                await SendMessageAsync(kv.Subscriber.ChatId, kv.Message, null, _cancellationTokenSource.Token));
+                await SendMessageAsync(kv.Subscriber.ChatId, kv.Message, markupService.GetDefaultMarkup(), _cancellationTokenSource.Token));
 
             await Task.WhenAll(tasks);
 
@@ -179,9 +179,10 @@ public class SitUpStraightService(
         if (subscriber != null)
             return;
 
+        await SendMessageAsync(chatId, Messages.StartMessage, null, cancellationToken);
         await AddSubscriberAsync(chatId, cancellationToken);
-
-        await SendMessageAsync(chatId, Messages.Message, null, cancellationToken);
+        await Task.Delay(1000, cancellationToken);
+        await HandleSelectTimezoneCommandAsync(chatId, cancellationToken);
     }
 
     private async Task HandleSelectTimezoneCommandAsync(long chatId, CancellationToken cancellationToken)
@@ -231,7 +232,7 @@ public class SitUpStraightService(
         await SendMessageAsync(
             chatId,
             info,
-            null,
+            markupService.GetDefaultMarkup(),
             cancellationToken
         );
     }
@@ -240,24 +241,35 @@ public class SitUpStraightService(
     {
         var id = int.Parse(timezoneId);
         var timezone = timezonesService.GetTimezone(id);
-        await UpdateSubscriberTimezone(chatId, timezone.Offset, cancellationToken);
-
+        var subscriber = await UpdateSubscriberTimezone(chatId, timezone.Offset, cancellationToken);
+        var markup = IsFirstLaunch(subscriber) ? null : markupService.GetDefaultMarkup();
         await SendMessageAsync(
             chatId,
             $"Выбрана таймзона: {timezone.Title}",
-            null,
+            markup,
             cancellationToken);
+
+        if (IsFirstLaunch(subscriber))
+        {
+            await HandleSelectDaysCommandAsync(chatId, cancellationToken);
+        }
     }
 
     private async Task HandleDaysCallbackQueryAsync(long chatId, string day, CancellationToken cancellationToken)
     {
         var daysPerWeek = int.Parse(day);
-        await UpdateSubscriberDaysAsync(chatId, daysPerWeek, cancellationToken);
+        var subscriber = await UpdateSubscriberDaysAsync(chatId, daysPerWeek, cancellationToken);
+        var markup = IsFirstLaunch(subscriber) ? null : markupService.GetDefaultMarkup();
         await SendMessageAsync(
             chatId,
             $"Ровная спина будет {daysPerWeek} дней в неделю",
-            null,
+            markup,
             cancellationToken);
+
+        if (IsFirstLaunch(subscriber))
+        {
+            await HandleSelectHoursCommandAsync(chatId, cancellationToken);
+        }
     }
 
     private async Task HandleHoursCallbackQueryAsync(long chatId, string[] callbackData, CancellationToken cancellationToken)
@@ -267,7 +279,7 @@ public class SitUpStraightService(
             await SendMessageAsync(
                 chatId,
                 $"Скоро будет. А пока: выпрями спину!",
-                null,
+                markupService.GetDefaultMarkup(),
                 cancellationToken);
             // todo: customize
         }
@@ -279,18 +291,23 @@ public class SitUpStraightService(
             var startHourUtc = TimeHelper.GetHourUtc(userStartHour, subscriber.Offset);
             var endHourUtc = TimeHelper.GetHourUtc(userEndHour, subscriber.Offset);
             await UpdateSubscriberHours(chatId, startHourUtc, endHourUtc, cancellationToken);
-
+            var markup = IsFirstLaunch(subscriber) ? null : markupService.GetDefaultMarkup();
             await SendMessageAsync(
                 chatId,
                 $"Выбрано время с {userStartHour} по {userEndHour}",
-                null,
+                markup,
                 cancellationToken);
+
+            if (IsFirstLaunch(subscriber))
+            {
+                await UpdateSubscriberConfiguredAsync(chatId, cancellationToken);
+                await SendMessageAsync(chatId, Messages.InitialConfigurationFinished, null, cancellationToken);
+            }
         }
     }
 
     private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
     {
-        replyMarkup ??= markupService.GetDefaultMarkup();
         await _botClient!.SendTextMessageAsync(chatId, message, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
     }
 
@@ -356,14 +373,14 @@ public class SitUpStraightService(
         logger.LogInformation("Database migration completed");
     }
 
-    private async Task UpdateSubscriberTimezone(long chatId, int offset, CancellationToken cancellationToken)
+    private async Task<Subscriber?> UpdateSubscriberTimezone(long chatId, int offset, CancellationToken cancellationToken)
     {
         using var scope = serviceScopeFactory.CreateScope();
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
 
         var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken);
         if (subscriberFromDb == null)
-            return;
+            return null;
 
         var currentOffset = subscriberFromDb.Offset;
         var offsetDiff = Math.Abs(offset - currentOffset);
@@ -393,6 +410,8 @@ public class SitUpStraightService(
             subscriber.StartHourUtc = startHourUtc;
             subscriber.EndHourUtc = endHourUtc;
         }
+
+        return subscriber;
     }
 
     private async Task UpdateSubscriberHours(long chatId, int startHourUtc, int endHourUtc, CancellationToken cancellationToken)
@@ -418,7 +437,7 @@ public class SitUpStraightService(
         }
     }
 
-    private async Task UpdateSubscriberDaysAsync(long chatId, int daysPerWeek, CancellationToken cancellationToken)
+    private async Task UpdateSubscriberConfiguredAsync(long chatId, CancellationToken cancellationToken)
     {
         using var scope = serviceScopeFactory.CreateScope();
         using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
@@ -426,6 +445,27 @@ public class SitUpStraightService(
         var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken);
         if (subscriberFromDb == null)
             return;
+
+        subscriberFromDb.Configured = true;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Subscriber's configured has been updated");
+
+        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        if (subscriber != null)
+        {
+            subscriber.Configured = true;
+        }
+    }
+
+    private async Task<Subscriber?> UpdateSubscriberDaysAsync(long chatId, int daysPerWeek, CancellationToken cancellationToken)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+
+        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId, cancellationToken], cancellationToken);
+        if (subscriberFromDb == null)
+            return null;
 
         subscriberFromDb.DaysPerWeek = daysPerWeek;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -436,7 +476,11 @@ public class SitUpStraightService(
         {
             subscriber.DaysPerWeek = daysPerWeek;
         }
+
+        return subscriber;
     }
+
+    private static bool IsFirstLaunch(Subscriber? subscriber) => subscriber != null && !subscriber.Configured;
 
     public override void Dispose()
     {
