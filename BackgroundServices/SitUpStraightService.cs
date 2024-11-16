@@ -56,15 +56,15 @@ public class SitUpStraightService(
                 var endHourUtc = s.EndHourUtc;
                 if (currentHourUtc > startHourUtc && currentHourUtc < endHourUtc)
                 {
-                    subscribersWithMessages.Add((s, Messages.Message));
+                    subscribersWithMessages.Add((s, MessageHelper.GetMessage(BotMessageType.ProbabilityBased)));
                 }
                 else if (startHourUtc == currentHourUtc)
                 {
-                    subscribersWithMessages.Add((s, Messages.MorningMessage));
+                    subscribersWithMessages.Add((s, MessageHelper.GetMessage(BotMessageType.Morning)));
                 }
                 else if (endHourUtc == currentHourUtc)
                 {
-                    subscribersWithMessages.Add((s, Messages.EveningMessage));
+                    subscribersWithMessages.Add((s, MessageHelper.GetMessage(BotMessageType.Evening)));
                 }
             }
 
@@ -179,7 +179,7 @@ public class SitUpStraightService(
         if (subscriber != null)
             return;
 
-        await SendMessageAsync(chatId, Messages.StartMessage, null, cancellationToken);
+        await SendMessageAsync(chatId, MessageHelper.GetMessage(BotMessageType.HelloMessage), null, cancellationToken);
         await AddSubscriberAsync(chatId, cancellationToken);
         await Task.Delay(1000, cancellationToken);
         await HandleSelectTimezoneCommandAsync(chatId, cancellationToken);
@@ -301,7 +301,7 @@ public class SitUpStraightService(
             if (IsFirstLaunch(subscriber))
             {
                 await UpdateSubscriberConfiguredAsync(chatId, cancellationToken);
-                await SendMessageAsync(chatId, Messages.InitialConfigurationFinished, null, cancellationToken);
+                await SendMessageAsync(chatId, MessageHelper.GetMessage(BotMessageType.ConfigurationCompleted), null, cancellationToken);
             }
         }
     }
