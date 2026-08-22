@@ -12,4 +12,6 @@ public class Subscriber
     public int Offset { get; set; } = 3;
     public int DaysPerWeek { get; set; } = 7;
     public bool Configured { get; set; }
+    public int TotalMessagesSent { get; set; }
+    public int LegendaryCount { get; set; }
 }

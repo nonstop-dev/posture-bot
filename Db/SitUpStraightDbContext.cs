@@ -6,6 +6,7 @@ namespace NonStop.SitUpStraight.Bot.Db;
 public class SitUpStraightDbContext(IConfiguration configuration) : DbContext
 {
     public DbSet<Subscriber> Subscribers { get; set; }
+    public DbSet<Feedback> Feedbacks { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
