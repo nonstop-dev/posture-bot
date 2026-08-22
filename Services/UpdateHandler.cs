@@ -1,33 +1,29 @@
 using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using NonStop.SitUpStraight.Bot.Configurations;
 using NonStop.SitUpStraight.Bot.Constants;
 using NonStop.SitUpStraight.Bot.Db;
-using NonStop.SitUpStraight.Bot.Extensions;
 using NonStop.SitUpStraight.Bot.Helpers;
 using NonStop.SitUpStraight.Bot.Models;
-using NonStop.SitUpStraight.Bot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace NonStop.SitUpStraight.Bot.BackgroundServices;
+namespace NonStop.SitUpStraight.Bot.Services;
 
-public class SitUpStraightService(
-    ILogger<SitUpStraightService> logger,
-    IServiceScopeFactory serviceScopeFactory,
+public class UpdateHandler(
+    ITelegramBotClient botClient,
+    SitUpStraightDbContext dbContext,
     ITimezonesService timezonesService,
     IMarkupService markupService,
-    IConfiguration configuration
-    ) : BackgroundService, IDisposable
+    IOptions<BotConfiguration> botConfiguration,
+    ILogger<UpdateHandler> logger
+    ) : IUpdateHandler
 {
-    private const int TotalMinutesCount = 60;
-    private List<Subscriber> _subscribers = [];
-    private TelegramBotClient? _botClient;
-    private readonly CancellationTokenSource _cancellationTokenSource = new();
-    private readonly ConcurrentDictionary<long, FeedbackSession> _feedbackSessions = new();
+    private static readonly ConcurrentDictionary<long, FeedbackSession> _feedbackSessions = new();
 
     private class FeedbackSession
     {
@@ -39,112 +35,24 @@ public class SitUpStraightService(
         public string? StepWaitingForText { get; set; }
     }
 
-    protected async override Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task HandleErrorAsync(ITelegramBotClient client, Exception exception, HandleErrorSource source, CancellationToken cancellationToken)
     {
-        await EnsureDatabaseCreatedAndMigrated(stoppingToken);
-        await InitializeBotClientAsync(stoppingToken);
-        await RestoreSubscribersAsync(stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        var message = exception switch
         {
-            var minutes = TotalMinutesCount - DateTime.UtcNow.Minute;
-            var delay = (minutes * 60) - DateTime.UtcNow.Second;
-            if (delay <= 0) delay = 60;
+            ApiRequestException apiEx => $"Telegram API Error: [{apiEx.ErrorCode}] {apiEx.Message}",
+            RequestException reqEx => $"Request error: {reqEx.Message}",
+            _ => exception.Message
+        };
 
-            await Task.Delay(TimeSpan.FromSeconds(delay), stoppingToken);
+        logger.LogError(exception, "HandleError in {Source}: {Message}", source, message);
 
-            if (_subscribers.Count == 0)
-                continue;
-
-            var now = DateTime.UtcNow;
-            var currentHourUtc = now.Hour;
-            List<(Subscriber Subscriber, string Message)> subscribersWithMessages = [];
-
-            foreach (var s in _subscribers.Where(sub => sub.Configured))
-            {
-                var dayNumber = now.DayOfWeek.ToDayNumber();
-                if (dayNumber > s.DaysPerWeek)
-                    continue;
-
-                var startHourUtc = s.StartHourUtc;
-                var endHourUtc = s.EndHourUtc;
-
-                bool isWithinHours;
-                if (startHourUtc <= endHourUtc)
-                {
-                    isWithinHours = currentHourUtc >= startHourUtc && currentHourUtc <= endHourUtc;
-                }
-                else
-                {
-                    // Ночной интервал через полночь
-                    isWithinHours = currentHourUtc >= startHourUtc || currentHourUtc <= endHourUtc;
-                }
-
-                if (!isWithinHours)
-                    continue;
-
-                var (hourlyMsg, probability) = MessageHelper.GetHourlyMessage(currentHourUtc, startHourUtc, endHourUtc);
-
-                s.TotalMessagesSent++;
-                if (probability == MessageProbability.Legend)
-                {
-                    s.LegendaryCount++;
-                }
-
-                // Проверяем юбилейные сообщения (отправляются ВМЕСТО стандартного)
-                var milestoneMsg = MessageHelper.GetMilestoneMessage(s.TotalMessagesSent);
-                var messageToSend = milestoneMsg ?? hourlyMsg;
-
-                // Проверяем первую или 10-ю легендарку
-                if (milestoneMsg == null && probability == MessageProbability.Legend)
-                {
-                    var specialLegendMsg = MessageHelper.GetLegendaryMilestoneMessage(s.LegendaryCount);
-                    if (specialLegendMsg != null)
-                    {
-                        messageToSend = $"{specialLegendMsg}\n\n{hourlyMsg}";
-                    }
-                }
-
-                subscribersWithMessages.Add((s, messageToSend));
-            }
-
-            if (subscribersWithMessages.Count > 0)
-            {
-                await SaveSubscribersStatsAsync(subscribersWithMessages.Select(x => x.Subscriber).ToList(), stoppingToken);
-
-                var tasks = subscribersWithMessages.Select(async kv =>
-                    await SendMessageAsync(kv.Subscriber.ChatId, kv.Message, markupService.GetDefaultMarkup(), _cancellationTokenSource.Token));
-
-                await Task.WhenAll(tasks);
-                logger.LogInformation("Worker: All hourly messages sent to {Count} subscribers", subscribersWithMessages.Count);
-            }
+        if (exception is RequestException)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
         }
     }
 
-    private async Task InitializeBotClientAsync(CancellationToken cancellationToken)
-    {
-        var botToken = configuration["BotConfiguration:BotToken"]
-            ?? throw new InvalidOperationException("Bot token is not configured in BotConfiguration:BotToken");
-        _botClient = new TelegramBotClient(botToken);
-
-        var receiverOptions = new ReceiverOptions
-        {
-            AllowedUpdates = [UpdateType.Message, UpdateType.MyChatMember, UpdateType.CallbackQuery],
-            DropPendingUpdates = true
-        };
-
-        _botClient.StartReceiving(
-            updateHandler: HandleUpdateAsync,
-            errorHandler: HandlePollingErrorAsync,
-            receiverOptions: receiverOptions,
-            cancellationToken: _cancellationTokenSource.Token
-        );
-
-        await _botClient.SetMyDescription("Выровняю спину даже верблюду! 🐫", cancellationToken: cancellationToken);
-        logger.LogInformation("Bot initialized successfully");
-    }
-
-    private async Task HandleUpdateAsync(ITelegramBotClient _, Update update, CancellationToken cancellationToken)
+    public async Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancellationToken)
     {
         try
         {
@@ -158,30 +66,30 @@ public class SitUpStraightService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error occurred while handling update");
+            logger.LogError(ex, "Unhandled error in HandleUpdateAsync");
         }
     }
 
     private async Task OnMessageAsync(Message message, CancellationToken cancellationToken)
     {
-        if (message is null)
-            return;
-
         var chatId = message.Chat.Id;
 
-        // Обработка геолокации для автоматического определения часового пояса
+        // Обработка геолокации
         if (message.Location != null)
         {
             await HandleLocationAsync(chatId, message.Location, cancellationToken);
             return;
         }
 
-        // Проверяем, находится ли пользователь в процессе ввода текста отзыва
+        // Обработка ввода текста в опросе обратной связи
         if (_feedbackSessions.TryGetValue(chatId, out var session) && session.WaitingForText)
         {
             await HandleFeedbackTextInputAsync(chatId, message.Text ?? "", session, cancellationToken);
             return;
         }
+
+        if (string.IsNullOrEmpty(message.Text))
+            return;
 
         switch (message.Text)
         {
@@ -216,8 +124,6 @@ public class SitUpStraightService(
                 _feedbackSessions.TryRemove(chatId, out _);
                 await SendMessageAsync(chatId, "Действие отменено.", markupService.GetDefaultMarkup(), cancellationToken);
                 break;
-            default:
-                return;
         }
     }
 
@@ -226,7 +132,7 @@ public class SitUpStraightService(
         if (callbackQuery.Message is null || string.IsNullOrEmpty(callbackQuery.Data))
             return;
 
-        await _botClient!.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: cancellationToken);
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: cancellationToken);
 
         var chatId = callbackQuery.Message.Chat.Id;
         var callbackData = callbackQuery.Data.Split("--");
@@ -234,10 +140,7 @@ public class SitUpStraightService(
 
         switch (command)
         {
-            case MarkupCommands.StartWizard:
-                await HandleSelectTimezoneCommandAsync(chatId, cancellationToken);
-                break;
-            case "set_tz":
+            case MarkupCommands.StartWizard or "set_tz":
                 await HandleSelectTimezoneCommandAsync(chatId, cancellationToken);
                 break;
             case "set_days":
@@ -309,16 +212,20 @@ public class SitUpStraightService(
     private async Task OnMyChatMemberAsync(ChatMemberUpdated myChatMember, CancellationToken cancellationToken)
     {
         var memberChatId = myChatMember?.Chat.Id;
-        if (memberChatId != null)
+        if (memberChatId.HasValue)
+        {
             await RemoveSubscriberAsync(memberChatId.Value, cancellationToken);
+        }
     }
 
     private async Task HandleStartCommandAsync(long chatId, CancellationToken cancellationToken)
     {
-        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber == null)
         {
-            await AddSubscriberAsync(chatId, cancellationToken);
+            subscriber = new Subscriber { ChatId = chatId };
+            dbContext.Subscribers.Add(subscriber);
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         await SendMessageAsync(
@@ -330,7 +237,7 @@ public class SitUpStraightService(
 
     private async Task HandleStatsCommandAsync(long chatId, CancellationToken cancellationToken)
     {
-        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber == null)
         {
             await SendMessageAsync(chatId, "Ты пока не зарегистрирован в боте. Нажми /start!", markupService.GetDefaultMarkup(), cancellationToken);
@@ -371,9 +278,8 @@ public class SitUpStraightService(
 
     private async Task HandleMySettingsCommandAsync(long chatId, CancellationToken cancellationToken)
     {
-        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
-        if (subscriber == null)
-            return;
+        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
+        if (subscriber == null) return;
 
         var timezones = timezonesService.GetTimezones();
         var timezone = timezones.FirstOrDefault(t => t.Offset == subscriber.Offset)?.Title ?? $"UTC{(subscriber.Offset >= 0 ? "+" : "")}{subscriber.Offset}";
@@ -393,8 +299,8 @@ public class SitUpStraightService(
         int offset = (int)Math.Round(location.Longitude / 15.0);
         offset = Math.Clamp(offset, -12, 14);
 
-        var subscriber = await UpdateSubscriberTimezone(chatId, offset, cancellationToken);
-        var markup = IsFirstLaunch(subscriber) ? null : markupService.GetDefaultMarkup();
+        var subscriber = await UpdateSubscriberTimezoneAsync(chatId, offset, cancellationToken);
+        var markup = subscriber is { Configured: true } ? markupService.GetDefaultMarkup() : null;
 
         await SendMessageAsync(
             chatId,
@@ -402,7 +308,7 @@ public class SitUpStraightService(
             markup,
             cancellationToken);
 
-        if (IsFirstLaunch(subscriber))
+        if (subscriber is { Configured: false })
         {
             await HandleSelectDaysCommandAsync(chatId, cancellationToken);
         }
@@ -412,8 +318,8 @@ public class SitUpStraightService(
     {
         var id = int.Parse(timezoneId);
         var timezone = timezonesService.GetTimezone(id);
-        var subscriber = await UpdateSubscriberTimezone(chatId, timezone.Offset, cancellationToken);
-        var markup = IsFirstLaunch(subscriber) ? null : markupService.GetDefaultMarkup();
+        var subscriber = await UpdateSubscriberTimezoneAsync(chatId, timezone.Offset, cancellationToken);
+        var markup = subscriber is { Configured: true } ? markupService.GetDefaultMarkup() : null;
 
         await SendMessageAsync(
             chatId,
@@ -421,7 +327,7 @@ public class SitUpStraightService(
             markup,
             cancellationToken);
 
-        if (IsFirstLaunch(subscriber))
+        if (subscriber is { Configured: false })
         {
             await HandleSelectDaysCommandAsync(chatId, cancellationToken);
         }
@@ -430,8 +336,14 @@ public class SitUpStraightService(
     private async Task HandleDaysCallbackQueryAsync(long chatId, string day, CancellationToken cancellationToken)
     {
         var daysPerWeek = int.Parse(day);
-        var subscriber = await UpdateSubscriberDaysAsync(chatId, daysPerWeek, cancellationToken);
-        var markup = IsFirstLaunch(subscriber) ? null : markupService.GetDefaultMarkup();
+        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
+        if (subscriber != null)
+        {
+            subscriber.DaysPerWeek = daysPerWeek;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var markup = subscriber is { Configured: true } ? markupService.GetDefaultMarkup() : null;
 
         await SendMessageAsync(
             chatId,
@@ -439,7 +351,7 @@ public class SitUpStraightService(
             markup,
             cancellationToken);
 
-        if (IsFirstLaunch(subscriber))
+        if (subscriber is { Configured: false })
         {
             await HandleSelectHoursCommandAsync(chatId, cancellationToken);
         }
@@ -449,28 +361,35 @@ public class SitUpStraightService(
     {
         var userStartHour = int.Parse(callbackData[0]);
         var userEndHour = int.Parse(callbackData[1]);
-        var subscriber = _subscribers.FirstOrDefault(x => x.ChatId == chatId);
+        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber == null) return;
 
         var startHourUtc = TimeHelper.GetHourUtc(userStartHour, subscriber.Offset);
         var endHourUtc = TimeHelper.GetHourUtc(userEndHour, subscriber.Offset);
-        await UpdateSubscriberHours(chatId, startHourUtc, endHourUtc, cancellationToken);
 
-        var markup = IsFirstLaunch(subscriber) ? null : markupService.GetDefaultMarkup();
+        subscriber.StartHourUtc = startHourUtc;
+        subscriber.EndHourUtc = endHourUtc;
+
+        bool isFirstLaunch = !subscriber.Configured;
+        if (isFirstLaunch)
+        {
+            subscriber.Configured = true;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         await SendMessageAsync(
             chatId,
             $"Выбрано время с {userStartHour}:00 по {userEndHour}:00",
-            markup,
+            isFirstLaunch ? null : markupService.GetDefaultMarkup(),
             cancellationToken);
 
-        if (IsFirstLaunch(subscriber))
+        if (isFirstLaunch)
         {
-            await UpdateSubscriberConfiguredAsync(chatId, cancellationToken);
             await SendMessageAsync(chatId, MessageHelper.GetConfigurationFinishedMessage(), markupService.GetDefaultMarkup(), cancellationToken);
         }
     }
 
-    // Feedback flow
     private async Task HandleFeedbackCommandAsync(long chatId, CancellationToken cancellationToken)
     {
         _feedbackSessions[chatId] = new FeedbackSession();
@@ -558,24 +477,20 @@ public class SitUpStraightService(
     {
         _feedbackSessions.TryRemove(chatId, out _);
 
-        using (var scope = serviceScopeFactory.CreateScope())
+        var feedback = new Feedback
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-            var feedback = new Feedback
-            {
-                ChatId = chatId,
-                Rating = session.Rating,
-                LikedOption = session.LikedOption,
-                ImproveOption = session.ImproveOption,
-                Comment = session.Comment,
-                CreatedAtUtc = DateTime.UtcNow
-            };
-            dbContext.Feedbacks.Add(feedback);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
+            ChatId = chatId,
+            Rating = session.Rating,
+            LikedOption = session.LikedOption,
+            ImproveOption = session.ImproveOption,
+            Comment = session.Comment,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        dbContext.Feedbacks.Add(feedback);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Пересылка отзыва администраторам, если настроен AdminChatId
-        var adminChatIdStr = configuration["BotConfiguration:AdminChatId"];
+        // Пересылка отзыва в AdminChatId
+        var adminChatIdStr = botConfiguration.Value.AdminChatId;
         if (!string.IsNullOrEmpty(adminChatIdStr) && long.TryParse(adminChatIdStr, out var adminChatId))
         {
             var adminMessage = $"📬 **Новый отзыв о боте!**\n" +
@@ -594,125 +509,15 @@ public class SitUpStraightService(
             cancellationToken);
     }
 
-    private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
+    private async Task<Subscriber?> UpdateSubscriberTimezoneAsync(long chatId, int offset, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _botClient!.SendMessage(chatId, message, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
-        }
-        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
-        {
-            logger.LogWarning("User {ChatId} blocked the bot. Removing subscriber.", chatId);
-            await RemoveSubscriberAsync(chatId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to send message to {ChatId}", chatId);
-        }
-    }
+        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
+        if (subscriber == null) return null;
 
-    private Task HandlePollingErrorAsync(ITelegramBotClient _, Exception exception, CancellationToken cancellationToken)
-    {
-        var message = exception switch
-        {
-            ApiRequestException apiRequestException
-                => $"Telegram API Error: [{apiRequestException.ErrorCode}] {apiRequestException.Message}",
-            _ => exception.Message
-        };
-
-        logger.LogError("{Message}", message);
-        return Task.CompletedTask;
-    }
-
-    private async Task AddSubscriberAsync(long chatId, CancellationToken cancellationToken)
-    {
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-
-        Subscriber newSubscriber = new() { ChatId = chatId };
-        _subscribers.Add(newSubscriber);
-        dbContext.Subscribers.Add(newSubscriber);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Subscriber {ChatId} has been added", chatId);
-    }
-
-    private async Task RemoveSubscriberAsync(long chatId, CancellationToken cancellationToken)
-    {
-        var subscriberToRemove = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
-        if (subscriberToRemove != null)
-        {
-            _subscribers.Remove(subscriberToRemove);
-        }
-
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-
-        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId], cancellationToken: cancellationToken);
-        if (subscriberFromDb == null)
-            return;
-
-        dbContext.Subscribers.Remove(subscriberFromDb);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Subscriber {ChatId} has been removed", chatId);
-    }
-
-    private async Task RestoreSubscribersAsync(CancellationToken cancellationToken)
-    {
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-        _subscribers = await dbContext.Subscribers.ToListAsync(cancellationToken);
-        logger.LogInformation("Restored {Count} subscribers from DB", _subscribers.Count);
-    }
-
-    private async Task EnsureDatabaseCreatedAndMigrated(CancellationToken cancellationToken)
-    {
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-        await dbContext.Database.MigrateAsync(cancellationToken);
-        logger.LogInformation("Database migration completed");
-    }
-
-    private async Task SaveSubscribersStatsAsync(List<Subscriber> subscribers, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var scope = serviceScopeFactory.CreateScope();
-            using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-
-            var ids = subscribers.Select(s => s.ChatId).ToList();
-            var dbSubscribers = await dbContext.Subscribers.Where(s => ids.Contains(s.ChatId)).ToListAsync(cancellationToken);
-
-            foreach (var dbSub in dbSubscribers)
-            {
-                var local = subscribers.FirstOrDefault(s => s.ChatId == dbSub.ChatId);
-                if (local != null)
-                {
-                    dbSub.TotalMessagesSent = local.TotalMessagesSent;
-                    dbSub.LegendaryCount = local.LegendaryCount;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to save subscribers stats to DB");
-        }
-    }
-
-    private async Task<Subscriber?> UpdateSubscriberTimezone(long chatId, int offset, CancellationToken cancellationToken)
-    {
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-
-        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
-        if (subscriberFromDb == null)
-            return null;
-
-        var currentOffset = subscriberFromDb.Offset;
+        var currentOffset = subscriber.Offset;
         var offsetDiff = Math.Abs(offset - currentOffset);
-        var startHourUtc = subscriberFromDb.StartHourUtc;
-        var endHourUtc = subscriberFromDb.EndHourUtc;
+        var startHourUtc = subscriber.StartHourUtc;
+        var endHourUtc = subscriber.EndHourUtc;
 
         if (currentOffset < offset)
         {
@@ -725,88 +530,39 @@ public class SitUpStraightService(
             endHourUtc = TimeHelper.RoundHourIfNeed(endHourUtc + offsetDiff);
         }
 
-        subscriberFromDb.Offset = offset;
-        subscriberFromDb.StartHourUtc = startHourUtc;
-        subscriberFromDb.EndHourUtc = endHourUtc;
+        subscriber.Offset = offset;
+        subscriber.StartHourUtc = startHourUtc;
+        subscriber.EndHourUtc = endHourUtc;
         await dbContext.SaveChangesAsync(cancellationToken);
-
-        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
-        if (subscriber != null)
-        {
-            subscriber.Offset = offset;
-            subscriber.StartHourUtc = startHourUtc;
-            subscriber.EndHourUtc = endHourUtc;
-        }
 
         return subscriber;
     }
 
-    private async Task UpdateSubscriberHours(long chatId, int startHourUtc, int endHourUtc, CancellationToken cancellationToken)
+    private async Task RemoveSubscriberAsync(long chatId, CancellationToken cancellationToken)
     {
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-
-        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
-        if (subscriberFromDb == null)
-            return;
-
-        subscriberFromDb.StartHourUtc = startHourUtc;
-        subscriberFromDb.EndHourUtc = endHourUtc;
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
+        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber != null)
         {
-            subscriber.StartHourUtc = startHourUtc;
-            subscriber.EndHourUtc = endHourUtc;
+            dbContext.Subscribers.Remove(subscriber);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Subscriber {ChatId} removed", chatId);
         }
     }
 
-    private async Task UpdateSubscriberConfiguredAsync(long chatId, CancellationToken cancellationToken)
+    private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
     {
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-
-        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
-        if (subscriberFromDb == null)
-            return;
-
-        subscriberFromDb.Configured = true;
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
-        if (subscriber != null)
+        try
         {
-            subscriber.Configured = true;
+            await botClient.SendMessage(chatId, message, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
         }
-    }
-
-    private async Task<Subscriber?> UpdateSubscriberDaysAsync(long chatId, int daysPerWeek, CancellationToken cancellationToken)
-    {
-        using var scope = serviceScopeFactory.CreateScope();
-        using var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-
-        var subscriberFromDb = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
-        if (subscriberFromDb == null)
-            return null;
-
-        subscriberFromDb.DaysPerWeek = daysPerWeek;
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var subscriber = _subscribers.FirstOrDefault(s => s.ChatId == chatId);
-        if (subscriber != null)
+        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
-            subscriber.DaysPerWeek = daysPerWeek;
+            logger.LogWarning("User {ChatId} blocked the bot. Removing subscriber.", chatId);
+            await RemoveSubscriberAsync(chatId, cancellationToken);
         }
-
-        return subscriber;
-    }
-
-    private static bool IsFirstLaunch(Subscriber? subscriber) => subscriber != null && !subscriber.Configured;
-
-    public override void Dispose()
-    {
-        _cancellationTokenSource.Cancel();
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send message to {ChatId}", chatId);
+        }
     }
 }
