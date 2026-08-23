@@ -10,6 +10,7 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
 namespace NonStop.SitUpStraight.Bot.Services;
@@ -174,7 +175,7 @@ public class UpdateHandler(
                 {
                     await SendMessageAsync(
                         chatId,
-                        "⏰ Выбери **час начала** напоминаний (утро):",
+                        "⏰ Выбери <b>час начала</b> напоминаний (утро):",
                         markupService.GetCustomStartHoursMarkup(),
                         cancellationToken);
                 }
@@ -188,7 +189,7 @@ public class UpdateHandler(
                 var startHour = int.Parse(callbackData[1]);
                 await SendMessageAsync(
                     chatId,
-                    $"Час начала выбран: {startHour}:00.\nТеперь выбери **час окончания** напоминаний (вечер):",
+                    $"Час начала выбран: {startHour}:00.\nТеперь выбери <b>час окончания</b> напоминаний (вечер):",
                     markupService.GetCustomEndHoursMarkup(startHour),
                     cancellationToken);
                 break;
@@ -255,7 +256,7 @@ public class UpdateHandler(
 
     private async Task HandleSettingsMenuCommandAsync(long chatId, CancellationToken cancellationToken)
     {
-        await SendMessageAsync(chatId, "⚙️ **Настройки бота**\nВыбери нужный раздел:", markupService.GetSettingsInlineMarkup(), cancellationToken);
+        await SendMessageAsync(chatId, "⚙️ <b>Настройки бота</b>\nВыбери нужный раздел:", markupService.GetSettingsInlineMarkup(), cancellationToken);
     }
 
     private async Task HandleSelectTimezoneCommandAsync(long chatId, CancellationToken cancellationToken)
@@ -395,7 +396,7 @@ public class UpdateHandler(
         _feedbackSessions[chatId] = new FeedbackSession();
         await SendMessageAsync(
             chatId,
-            "⭐️ **Как тебе опыт использования бота?**\nОцени от 1 до 5:",
+            "⭐️ <b>Как тебе опыт использования бота?</b>\nОцени от 1 до 5:",
             markupService.GetFeedbackRatingMarkup(),
             cancellationToken);
     }
@@ -407,7 +408,7 @@ public class UpdateHandler(
 
         await SendMessageAsync(
             chatId,
-            "👍 **Что тебе нравится в боте больше всего?**",
+            "👍 <b>Что тебе нравится в боте больше всего?</b>",
             markupService.GetFeedbackLikedMarkup(),
             cancellationToken);
     }
@@ -427,7 +428,7 @@ public class UpdateHandler(
 
         await SendMessageAsync(
             chatId,
-            "💡 **Что нам стоит улучшить или добавить?**",
+            "💡 <b>Что нам стоит улучшить или добавить?</b>",
             markupService.GetFeedbackImproveMarkup(),
             cancellationToken);
     }
@@ -459,7 +460,7 @@ public class UpdateHandler(
             session.StepWaitingForText = null;
             await SendMessageAsync(
                 chatId,
-                "💡 **Что нам стоит улучшить или добавить?**",
+                "💡 <b>Что нам стоит улучшить или добавить?</b>",
                 markupService.GetFeedbackImproveMarkup(),
                 cancellationToken);
             return;
@@ -493,8 +494,8 @@ public class UpdateHandler(
         var adminChatIdStr = botConfiguration.Value.AdminChatId;
         if (!string.IsNullOrEmpty(adminChatIdStr) && long.TryParse(adminChatIdStr, out var adminChatId))
         {
-            var adminMessage = $"📬 **Новый отзыв о боте!**\n" +
-                               $"User ID: `{chatId}`\n" +
+            var adminMessage = $"📬 <b>Новый отзыв о боте!</b>\n" +
+                               $"User ID: <code>{chatId}</code>\n" +
                                $"Оценка: {session.Rating} ⭐️\n" +
                                $"Понравилось: {session.LikedOption}\n" +
                                $"Улучшить: {session.ImproveOption}\n" +
@@ -504,7 +505,7 @@ public class UpdateHandler(
 
         await SendMessageAsync(
             chatId,
-            "✅ **Спасибо за твой отзыв!**\n\nТвоя обратная связь помогает делать бота лучше, а спины — ровнее! 🏔\nПродолжай держать осанку! 💪",
+            "✅ <b>Спасибо за твой отзыв!</b>\n\nТвоя обратная связь помогает делать бота лучше, а спины — ровнее! 🏔\nПродолжай держать осанку! 💪",
             markupService.GetDefaultMarkup(),
             cancellationToken);
     }
@@ -549,11 +550,11 @@ public class UpdateHandler(
         }
     }
 
-    private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken)
+    private async Task SendMessageAsync(long chatId, string message, IReplyMarkup? replyMarkup, CancellationToken cancellationToken, ParseMode parseMode = ParseMode.Html)
     {
         try
         {
-            await botClient.SendMessage(chatId, message, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
+            await botClient.SendMessage(chatId, message, parseMode: parseMode, replyMarkup: replyMarkup, cancellationToken: cancellationToken);
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {

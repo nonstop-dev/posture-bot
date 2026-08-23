@@ -3,13 +3,13 @@ using NonStop.SitUpStraight.Bot.Db;
 using NonStop.SitUpStraight.Bot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
-using Telegram.Bot.Types.Enums;
 
 namespace NonStop.SitUpStraight.Bot.BackgroundServices;
 
 public class BotPollingService(
-    IServiceProvider serviceProvider,
+    IServiceScopeFactory scopeFactory,
     ITelegramBotClient botClient,
+    UpdateHandler updateHandler,
     ILogger<BotPollingService> logger
     ) : BackgroundService
 {
@@ -30,7 +30,7 @@ public class BotPollingService(
 
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = [UpdateType.Message, UpdateType.MyChatMember, UpdateType.CallbackQuery],
+            AllowedUpdates = [],
             DropPendingUpdates = true
         };
 
@@ -38,9 +38,6 @@ public class BotPollingService(
         {
             try
             {
-                using var scope = serviceProvider.CreateScope();
-                var updateHandler = scope.ServiceProvider.GetRequiredService<UpdateHandler>();
-
                 await botClient.ReceiveAsync(
                     updateHandler: updateHandler,
                     receiverOptions: receiverOptions,
@@ -57,16 +54,27 @@ public class BotPollingService(
 
     private async Task EnsureDatabaseCreatedAndMigratedAsync(CancellationToken cancellationToken)
     {
-        try
+        var retryCount = 0;
+        const int maxRetries = 15;
+
+        while (retryCount < maxRetries && !cancellationToken.IsCancellationRequested)
         {
-            using var scope = serviceProvider.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
-            await dbContext.Database.MigrateAsync(cancellationToken);
-            logger.LogInformation("Database migration completed successfully");
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+                await dbContext.Database.MigrateAsync(cancellationToken);
+                logger.LogInformation("Database migration completed successfully");
+                return;
+            }
+            catch (Exception ex)
+            {
+                retryCount++;
+                logger.LogWarning(ex, "Database is not ready yet. Retrying migration ({Retry}/{MaxRetries}) in 2 seconds...", retryCount, maxRetries);
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            }
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to run database migrations");
-        }
+
+        logger.LogError("Failed to migrate database after {MaxRetries} retries", maxRetries);
     }
 }

@@ -78,3 +78,16 @@
    ```bash
    dotnet run
    ```
+
+---
+
+## ☁️ Деплой в Яндекс Облако (Production)
+
+Подробное пошаговое руководство по запуску бота и базы данных на виртуальной машине в Яндекс Облаке описано в **[DEPLOY_YANDEX_CLOUD.md](file:///Users/af/sources/nonstop/bot/NonStop.SitUpStraight.Bot/DEPLOY_YANDEX_CLOUD.md)**.
+
+Кратко:
+```bash
+cp .env.example .env
+# Заполните BOT_TOKEN и POSTGRES_PASSWORD в .env
+docker compose up -d --build
+```

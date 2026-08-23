@@ -18,6 +18,11 @@ builder.Services.Configure<BotConfiguration>(builder.Configuration.GetSection("B
 
 // Typed TelegramBotClient with IHttpClientFactory
 builder.Services.AddHttpClient("telegram_bot_client").RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        ConnectTimeout = TimeSpan.FromSeconds(10),
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15)
+    })
     .AddTypedClient<ITelegramBotClient>((httpClient, sp) =>
     {
         var botConfig = sp.GetService<IOptions<BotConfiguration>>()?.Value;
@@ -35,7 +40,7 @@ builder.Services.AddSingleton<ITimezonesService, TimezonesService>();
 builder.Services.AddSingleton<IMarkupService, MarkupService>();
 
 // Update Handler & Background Services
-builder.Services.AddScoped<UpdateHandler>();
+builder.Services.AddSingleton<UpdateHandler>();
 builder.Services.AddHostedService<BotPollingService>();
 builder.Services.AddHostedService<PostureReminderWorker>();
 

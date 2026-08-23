@@ -1,12 +1,35 @@
-# Please refer https://aka.ms/HTTPSinContainer on how to setup an https developer certificate for your ASP.NET Core service.
-
-version: '3.4'
-
 services:
-  nonstopsitupstraightbot:
-    image: nonstopsitupstraightbot
+  postgres:
+    image: postgres:17-alpine
+    container_name: situpstraight-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-situpstraightdb}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-situpstraightdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    image: situpstraight-bot:latest
+    container_name: situpstraight-bot
     build:
       context: .
-      dockerfile: ./Dockerfile
-    ports:
-      - 5000:5000
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - ConnectionStrings__SitUpStraightDb=Host=postgres;Port=5432;Database=${POSTGRES_DB:-situpstraightdb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres_secure_password}
+      - BotConfiguration__BotToken=${BOT_TOKEN}
+      - BotConfiguration__AdminChatId=${ADMIN_CHAT_ID:-}
+      - ASPNETCORE_ENVIRONMENT=Production
+
+volumes:
+  pgdata:

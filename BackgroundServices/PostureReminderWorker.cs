@@ -6,6 +6,7 @@ using NonStop.SitUpStraight.Bot.Models;
 using NonStop.SitUpStraight.Bot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
+using Telegram.Bot.Types.Enums;
 
 namespace NonStop.SitUpStraight.Bot.BackgroundServices;
 
@@ -117,6 +118,7 @@ public class PostureReminderWorker(
                     await botClient.SendMessage(
                         item.Subscriber.ChatId,
                         item.Message,
+                        parseMode: ParseMode.Html,
                         replyMarkup: markupService.GetDefaultMarkup(),
                         cancellationToken: cancellationToken);
                 }

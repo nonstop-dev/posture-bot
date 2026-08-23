@@ -700,3 +700,7 @@ Temporary Items
 ### macOS Patch ###
 # iCloud generated files
 *.icloud
+
+# Environment & Secrets
+.env
+*.key.json
