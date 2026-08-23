@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
-using NonStop.SitUpStraight.Bot.Helpers;
+using NonStop.Posture.Bot.Helpers;
 
-namespace NonStop.SitUpStraight.Bot.Models;
+namespace NonStop.Posture.Bot.Models;
 
 public class Subscriber
 {

@@ -1,6 +1,6 @@
-using NonStop.SitUpStraight.Bot.Models;
+using NonStop.Posture.Bot.Models;
 
-namespace NonStop.SitUpStraight.Bot.Services;
+namespace NonStop.Posture.Bot.Services;
 
 public interface ITimezonesService
 {

@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/NonStop.SitUpStraight.Bot.sln",
+                "${workspaceFolder}/NonStop.Posture.Bot.sln",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary;ForceNoAlign"
             ],
@@ -19,7 +19,7 @@
             "type": "process",
             "args": [
                 "publish",
-                "${workspaceFolder}/NonStop.SitUpStraight.Bot.sln",
+                "${workspaceFolder}/NonStop.Posture.Bot.sln",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary;ForceNoAlign"
             ],
@@ -33,7 +33,7 @@
                 "watch",
                 "run",
                 "--project",
-                "${workspaceFolder}/NonStop.SitUpStraight.Bot.sln"
+                "${workspaceFolder}/NonStop.Posture.Bot.sln"
             ],
             "problemMatcher": "$msCompile"
         },
@@ -44,14 +44,14 @@
                 "build"
             ],
             "dockerBuild": {
-                "tag": "nonstopsitupstraightbot:dev",
+                "tag": "nonstopposturebot:dev",
                 "target": "base",
                 "dockerfile": "${workspaceFolder}/Dockerfile",
                 "context": "${workspaceFolder}",
                 "pull": true
             },
             "netCore": {
-                "appProject": "${workspaceFolder}/NonStop.SitUpStraight.Bot.csproj"
+                "appProject": "${workspaceFolder}/NonStop.Posture.Bot.csproj"
             }
         },
         {
@@ -61,7 +61,7 @@
                 "build"
             ],
             "dockerBuild": {
-                "tag": "nonstopsitupstraightbot:latest",
+                "tag": "nonstopposturebot:latest",
                 "dockerfile": "${workspaceFolder}/Dockerfile",
                 "context": "${workspaceFolder}",
                 "platform": {
@@ -71,7 +71,7 @@
                 "pull": true
             },
             "netCore": {
-                "appProject": "${workspaceFolder}/NonStop.SitUpStraight.Bot.csproj"
+                "appProject": "${workspaceFolder}/NonStop.Posture.Bot.csproj"
             }
         },
         {
@@ -82,7 +82,7 @@
             ],
             "dockerRun": {},
             "netCore": {
-                "appProject": "${workspaceFolder}/NonStop.SitUpStraight.Bot.csproj",
+                "appProject": "${workspaceFolder}/NonStop.Posture.Bot.csproj",
                 "enableDebugging": true
             }
         },
@@ -94,7 +94,7 @@
             ],
             "dockerRun": {},
             "netCore": {
-                "appProject": "${workspaceFolder}/NonStop.SitUpStraight.Bot.csproj"
+                "appProject": "${workspaceFolder}/NonStop.Posture.Bot.csproj"
             }
         }
     ]

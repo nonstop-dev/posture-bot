@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Options;
-using NonStop.SitUpStraight.Bot.BackgroundServices;
-using NonStop.SitUpStraight.Bot.Configurations;
-using NonStop.SitUpStraight.Bot.Db;
-using NonStop.SitUpStraight.Bot.Services;
+using NonStop.Posture.Bot.BackgroundServices;
+using NonStop.Posture.Bot.Configurations;
+using NonStop.Posture.Bot.Db;
+using NonStop.Posture.Bot.Services;
 using Serilog;
 using Telegram.Bot;
 
@@ -35,7 +35,7 @@ builder.Services.AddHttpClient("telegram_bot_client").RemoveAllLoggers()
     });
 
 // Database & Domain Services
-builder.Services.AddDbContext<SitUpStraightDbContext>();
+builder.Services.AddDbContext<PostureDbContext>();
 builder.Services.AddSingleton<ITimezonesService, TimezonesService>();
 builder.Services.AddSingleton<IMarkupService, MarkupService>();
 

@@ -1,14 +1,14 @@
 using Microsoft.EntityFrameworkCore;
-using NonStop.SitUpStraight.Bot.Db;
-using NonStop.SitUpStraight.Bot.Extensions;
-using NonStop.SitUpStraight.Bot.Helpers;
-using NonStop.SitUpStraight.Bot.Models;
-using NonStop.SitUpStraight.Bot.Services;
+using NonStop.Posture.Bot.Db;
+using NonStop.Posture.Bot.Extensions;
+using NonStop.Posture.Bot.Helpers;
+using NonStop.Posture.Bot.Models;
+using NonStop.Posture.Bot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types.Enums;
 
-namespace NonStop.SitUpStraight.Bot.BackgroundServices;
+namespace NonStop.Posture.Bot.BackgroundServices;
 
 public class PostureReminderWorker(
     IServiceProvider serviceProvider,
@@ -45,7 +45,7 @@ public class PostureReminderWorker(
     private async Task ProcessHourlyRemindersAsync(CancellationToken cancellationToken)
     {
         using var scope = serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
 
         var subscribers = await dbContext.Subscribers
             .Where(s => s.Configured)
@@ -126,7 +126,7 @@ public class PostureReminderWorker(
                 {
                     logger.LogWarning("User {ChatId} blocked the bot during reminder. Removing subscriber.", item.Subscriber.ChatId);
                     using var innerScope = serviceProvider.CreateScope();
-                    var innerDb = innerScope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+                    var innerDb = innerScope.ServiceProvider.GetRequiredService<PostureDbContext>();
                     var toRemove = await innerDb.Subscribers.FindAsync([item.Subscriber.ChatId], cancellationToken);
                     if (toRemove != null)
                     {

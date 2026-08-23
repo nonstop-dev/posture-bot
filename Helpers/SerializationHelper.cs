@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace NonStop.SitUpStraight.Bot.Helpers;
+namespace NonStop.Posture.Bot.Helpers;
 
 public static class SerializationHelper
 {

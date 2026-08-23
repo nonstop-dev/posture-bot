@@ -1,23 +1,23 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: situpstraight-postgres
+    container_name: posture-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-situpstraightdb}
+      POSTGRES_DB: ${POSTGRES_DB:-posturedb}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-situpstraightdb}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-posturedb}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   bot:
-    image: situpstraight-bot:latest
-    container_name: situpstraight-bot
+    image: posture-bot:latest
+    container_name: posture-bot
     build:
       context: .
       dockerfile: Dockerfile
@@ -26,7 +26,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - ConnectionStrings__SitUpStraightDb=Host=postgres;Port=5432;Database=${POSTGRES_DB:-situpstraightdb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres_secure_password}
+      - ConnectionStrings__PostureDb=Host=postgres;Port=5432;Database=${POSTGRES_DB:-posturedb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres_secure_password}
       - BotConfiguration__BotToken=${BOT_TOKEN}
       - BotConfiguration__AdminChatId=${ADMIN_CHAT_ID:-}
       - ASPNETCORE_ENVIRONMENT=Production

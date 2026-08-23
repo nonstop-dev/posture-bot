@@ -9,7 +9,7 @@
 
 «Выпрями спину, гора!» — это Telegram-бот, который в течение дня ненавязчиво и с юмором напоминает выпрямить спину, расправить плечи и сделать полезную мини-разминку.
 
-Полная концепция, лор, система рангов и база сообщений описаны в документе **[«Выпрями спину, гора.md»](file:///Users/af/sources/nonstop/bot/NonStop.SitUpStraight.Bot/%D0%92%D1%8B%D0%BF%D1%80%D1%8F%D0%BC%D0%B8%20%D1%81%D0%BF%D0%B8%D0%BD%D1%83,%20%D0%B3%D0%BE%D1%80%D0%B0.md)**.
+Полная концепция, лор, система рангов и база сообщений описаны в документе **[«Выпрями спину, гора.md»](file:///Users/af/sources/nonstop/bot/NonStop.Posture.Bot/%D0%92%D1%8B%D0%BF%D1%80%D1%8F%D0%BC%D0%B8%20%D1%81%D0%BF%D0%B8%D0%BD%D1%83,%20%D0%B3%D0%BE%D1%80%D0%B0.md)**.
 
 ---
 
@@ -59,14 +59,14 @@
 1. Склонируйте репозиторий:
    ```bash
    git clone <repo-url>
-   cd NonStop.SitUpStraight.Bot
+   cd NonStop.Posture.Bot
    ```
 
 2. Укажите конфигурацию в `appsettings.json` или через переменные окружения:
    ```json
    {
      "ConnectionStrings": {
-       "SitUpStraightDb": "Host=localhost;Port=5432;Database=situpstraightdb;Username=postgres;Password=yourpassword"
+       "PostureDb": "Host=localhost;Port=5432;Database=posturedb;Username=postgres;Password=yourpassword"
      },
      "BotConfiguration": {
        "BotToken": "YOUR_TELEGRAM_BOT_TOKEN"
@@ -81,13 +81,14 @@
 
 ---
 
-## ☁️ Деплой в Яндекс Облако (Production)
+## 🐳 Запуск через Docker Compose (Production)
 
-Подробное пошаговое руководство по запуску бота и базы данных на виртуальной машине в Яндекс Облаке описано в **[DEPLOY_YANDEX_CLOUD.md](file:///Users/af/sources/nonstop/bot/NonStop.SitUpStraight.Bot/DEPLOY_YANDEX_CLOUD.md)**.
-
-Кратко:
-```bash
-cp .env.example .env
-# Заполните BOT_TOKEN и POSTGRES_PASSWORD в .env
-docker compose up -d --build
-```
+1. Создайте `.env` на основе примера:
+   ```bash
+   cp .env.example .env
+   ```
+2. Заполните `BOT_TOKEN` и `POSTGRES_PASSWORD` в `.env`.
+3. Запустите контейнеры:
+   ```bash
+   docker compose up -d --build
+   ```

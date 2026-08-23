@@ -3,8 +3,8 @@
 version: '3.4'
 
 services:
-  nonstopsitupstraightbot:
-    image: nonstopsitupstraightbot
+  nonstopposturebot:
+    image: nonstopposturebot
     build:
       context: .
       dockerfile: ./Dockerfile

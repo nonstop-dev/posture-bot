@@ -1,4 +1,4 @@
-namespace NonStop.SitUpStraight.Bot.Configurations;
+namespace NonStop.Posture.Bot.Configurations;
 
 public class BotConfiguration
 {

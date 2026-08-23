@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using NonStop.SitUpStraight.Bot.Db;
-using NonStop.SitUpStraight.Bot.Services;
+using NonStop.Posture.Bot.Db;
+using NonStop.Posture.Bot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 
-namespace NonStop.SitUpStraight.Bot.BackgroundServices;
+namespace NonStop.Posture.Bot.BackgroundServices;
 
 public class BotPollingService(
     IServiceScopeFactory scopeFactory,
@@ -62,7 +62,7 @@ public class BotPollingService(
             try
             {
                 using var scope = scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<SitUpStraightDbContext>();
+                var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
                 await dbContext.Database.MigrateAsync(cancellationToken);
                 logger.LogInformation("Database migration completed successfully");
                 return;

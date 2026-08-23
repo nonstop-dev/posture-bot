@@ -1,4 +1,4 @@
-namespace NonStop.SitUpStraight.Bot.Models;
+namespace NonStop.Posture.Bot.Models;
 
 public enum BotMessageType
 {

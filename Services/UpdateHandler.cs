@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using NonStop.SitUpStraight.Bot.Configurations;
-using NonStop.SitUpStraight.Bot.Constants;
-using NonStop.SitUpStraight.Bot.Db;
-using NonStop.SitUpStraight.Bot.Helpers;
-using NonStop.SitUpStraight.Bot.Models;
+using NonStop.Posture.Bot.Configurations;
+using NonStop.Posture.Bot.Constants;
+using NonStop.Posture.Bot.Db;
+using NonStop.Posture.Bot.Helpers;
+using NonStop.Posture.Bot.Models;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -13,11 +13,11 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace NonStop.SitUpStraight.Bot.Services;
+namespace NonStop.Posture.Bot.Services;
 
 public class UpdateHandler(
     ITelegramBotClient botClient,
-    SitUpStraightDbContext dbContext,
+    PostureDbContext dbContext,
     ITimezonesService timezonesService,
     IMarkupService markupService,
     IOptions<BotConfiguration> botConfiguration,

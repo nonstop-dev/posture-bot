@@ -1,4 +1,4 @@
-namespace NonStop.SitUpStraight.Bot.Constants;
+namespace NonStop.Posture.Bot.Constants;
 
 public static class BotCommands
 {

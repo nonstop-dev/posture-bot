@@ -3,15 +3,15 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using NonStop.SitUpStraight.Bot.Db;
+using NonStop.Posture.Bot.Db;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace NonStop.SitUpStraight.Bot.Migrations
+namespace NonStop.Posture.Bot.Migrations
 {
-    [DbContext(typeof(SitUpStraightDbContext))]
-    partial class SitUpStraightDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(PostureDbContext))]
+    partial class PostureDbContextModelSnapshot : ModelSnapshot
     {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
@@ -22,7 +22,7 @@ namespace NonStop.SitUpStraight.Bot.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("NonStop.SitUpStraight.Bot.Models.Feedback", b =>
+            modelBuilder.Entity("NonStop.Posture.Bot.Models.Feedback", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -53,7 +53,7 @@ namespace NonStop.SitUpStraight.Bot.Migrations
                     b.ToTable("Feedbacks");
                 });
 
-            modelBuilder.Entity("NonStop.SitUpStraight.Bot.Models.Subscriber", b =>
+            modelBuilder.Entity("NonStop.Posture.Bot.Models.Subscriber", b =>
                 {
                     b.Property<long>("ChatId")
                         .ValueGeneratedOnAdd()

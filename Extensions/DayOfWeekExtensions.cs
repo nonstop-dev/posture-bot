@@ -1,4 +1,4 @@
-namespace NonStop.SitUpStraight.Bot.Extensions;
+namespace NonStop.Posture.Bot.Extensions;
 
 public static class DayOfWeekExtensions
 {

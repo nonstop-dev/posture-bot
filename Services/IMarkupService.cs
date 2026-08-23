@@ -1,6 +1,6 @@
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace NonStop.SitUpStraight.Bot.Services;
+namespace NonStop.Posture.Bot.Services;
 
 public interface IMarkupService
 {

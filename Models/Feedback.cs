@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace NonStop.SitUpStraight.Bot.Models;
+namespace NonStop.Posture.Bot.Models;
 
 public class Feedback
 {

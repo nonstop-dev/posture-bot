@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace NonStop.SitUpStraight.Bot.Migrations
+namespace NonStop.Posture.Bot.Migrations
 {
     /// <inheritdoc />
     public partial class Addhoursselect : Migration

@@ -9,17 +9,17 @@ USER app
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG configuration=Release
 WORKDIR /src
-COPY ["NonStop.SitUpStraight.Bot.csproj", "./"]
-RUN dotnet restore "NonStop.SitUpStraight.Bot.csproj"
+COPY ["NonStop.Posture.Bot.csproj", "./"]
+RUN dotnet restore "NonStop.Posture.Bot.csproj"
 COPY . .
 WORKDIR "/src/."
-RUN dotnet build "NonStop.SitUpStraight.Bot.csproj" -c $configuration -o /app/build
+RUN dotnet build "NonStop.Posture.Bot.csproj" -c $configuration -o /app/build
 
 FROM build AS publish
 ARG configuration=Release
-RUN dotnet publish "NonStop.SitUpStraight.Bot.csproj" -c $configuration -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "NonStop.Posture.Bot.csproj" -c $configuration -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "NonStop.SitUpStraight.Bot.dll"]
+ENTRYPOINT ["dotnet", "NonStop.Posture.Bot.dll"]

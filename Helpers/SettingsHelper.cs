@@ -1,6 +1,6 @@
-using NonStop.SitUpStraight.Bot.Constants;
+using NonStop.Posture.Bot.Constants;
 
-namespace NonStop.SitUpStraight.Bot.Helpers;
+namespace NonStop.Posture.Bot.Helpers;
 
 public static class SettingsHelper
 {

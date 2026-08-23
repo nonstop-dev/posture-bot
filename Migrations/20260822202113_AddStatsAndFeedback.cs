@@ -4,7 +4,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace NonStop.SitUpStraight.Bot.Migrations
+namespace NonStop.Posture.Bot.Migrations
 {
     /// <inheritdoc />
     public partial class AddStatsAndFeedback : Migration

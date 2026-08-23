@@ -1,6 +1,6 @@
-using NonStop.SitUpStraight.Bot.Models;
+using NonStop.Posture.Bot.Models;
 
-namespace NonStop.SitUpStraight.Bot.Helpers;
+namespace NonStop.Posture.Bot.Helpers;
 
 public static class MessageHelper
 {

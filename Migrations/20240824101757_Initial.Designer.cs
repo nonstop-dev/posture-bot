@@ -3,14 +3,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using NonStop.SitUpStraight.Bot.Db;
+using NonStop.Posture.Bot.Db;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace NonStop.SitUpStraight.Bot.Migrations
+namespace NonStop.Posture.Bot.Migrations
 {
-    [DbContext(typeof(SitUpStraightDbContext))]
+    [DbContext(typeof(PostureDbContext))]
     [Migration("20240824101757_Initial")]
     partial class Initial
     {
@@ -24,7 +24,7 @@ namespace NonStop.SitUpStraight.Bot.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("NonStop.SitUpStraight.Bot.Models.Subscriber", b =>
+            modelBuilder.Entity("NonStop.Posture.Bot.Models.Subscriber", b =>
                 {
                     b.Property<long>("ChatId")
                         .ValueGeneratedOnAdd()
