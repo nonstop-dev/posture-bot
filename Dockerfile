@@ -9,10 +9,10 @@ USER app
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG configuration=Release
 WORKDIR /src
-COPY ["NonStop.Posture.Bot.csproj", "./"]
-RUN dotnet restore "NonStop.Posture.Bot.csproj"
+COPY ["src/NonStop.Posture.Bot/NonStop.Posture.Bot.csproj", "src/NonStop.Posture.Bot/"]
+RUN dotnet restore "src/NonStop.Posture.Bot/NonStop.Posture.Bot.csproj"
 COPY . .
-WORKDIR "/src/."
+WORKDIR "/src/src/NonStop.Posture.Bot"
 RUN dotnet build "NonStop.Posture.Bot.csproj" -c $configuration -o /app/build
 
 FROM build AS publish
