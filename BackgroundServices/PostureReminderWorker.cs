@@ -54,35 +54,50 @@ public class PostureReminderWorker(
         if (subscribers.Count == 0)
             return;
 
-        var now = DateTime.UtcNow;
-        var currentHourUtc = now.Hour;
-        var dayNumber = now.DayOfWeek.ToDayNumber();
-
         List<(Subscriber Subscriber, string Message)> notifications = [];
 
         foreach (var s in subscribers)
         {
-            if (dayNumber > s.DaysPerWeek)
-                continue;
-
-            var startHourUtc = s.StartHourUtc;
-            var endHourUtc = s.EndHourUtc;
+            var localNow = DateTime.UtcNow.AddHours(s.Offset);
+            var currentHourLocal = localNow.Hour;
+            var startHourLocal = TimeHelper.GetHourLocal(s.StartHourUtc, s.Offset);
+            var endHourLocal = TimeHelper.GetHourLocal(s.EndHourUtc, s.Offset);
 
             bool isWithinHours;
-            if (startHourUtc <= endHourUtc)
+            int activeDayNumber;
+
+            if (startHourLocal <= endHourLocal)
             {
-                isWithinHours = currentHourUtc >= startHourUtc && currentHourUtc <= endHourUtc;
+                // Дневной интервал в рамках одних суток (например, 09:00 - 21:00 или 00:00 - 04:00)
+                isWithinHours = currentHourLocal >= startHourLocal && currentHourLocal <= endHourLocal;
+                activeDayNumber = localNow.DayOfWeek.ToDayNumber();
             }
             else
             {
-                // Ночной интервал через полночь
-                isWithinHours = currentHourUtc >= startHourUtc || currentHourUtc <= endHourUtc;
+                // Ночной интервал с переходом через полночь (например, 09:00 - 03:00 или 22:00 - 04:00)
+                if (currentHourLocal >= startHourLocal)
+                {
+                    // До полуночи: смена сегодняшнего дня
+                    isWithinHours = true;
+                    activeDayNumber = localNow.DayOfWeek.ToDayNumber();
+                }
+                else if (currentHourLocal <= endHourLocal)
+                {
+                    // После полуночи: продолжение смены вчерашнего дня
+                    isWithinHours = true;
+                    activeDayNumber = localNow.AddDays(-1).DayOfWeek.ToDayNumber();
+                }
+                else
+                {
+                    isWithinHours = false;
+                    activeDayNumber = localNow.DayOfWeek.ToDayNumber();
+                }
             }
 
-            if (!isWithinHours)
+            if (!isWithinHours || activeDayNumber > s.DaysPerWeek)
                 continue;
 
-            var (hourlyMsg, probability) = MessageHelper.GetHourlyMessage(currentHourUtc, startHourUtc, endHourUtc);
+            var (hourlyMsg, probability) = MessageHelper.GetHourlyMessage(currentHourLocal, startHourLocal, endHourLocal);
 
             s.TotalMessagesSent++;
             if (probability == MessageProbability.Legend)
