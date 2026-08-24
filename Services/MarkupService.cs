@@ -69,17 +69,17 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
             {
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("9:00 - 21:00", $"{command}--9--21"),
-                    InlineKeyboardButton.WithCallbackData("10:00 - 20:00", $"{command}--10--20")
+                    InlineKeyboardButton.WithCallbackData("09:00 - 21:00 (Весь день)", $"{command}--9--21"),
+                    InlineKeyboardButton.WithCallbackData("10:00 - 19:00 (Рабочее)", $"{command}--10--19")
                 },
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("9:00 - 20:00", $"{command}--9--20"),
-                    InlineKeyboardButton.WithCallbackData("10:00 - 21:00", $"{command}--10--21")
+                    InlineKeyboardButton.WithCallbackData("10:00 - 22:00 (Поздний день)", $"{command}--10--22"),
+                    InlineKeyboardButton.WithCallbackData("00:00 - 04:00 (Ночной режим)", $"{command}--0--4")
                 },
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("⚙️ Настроить своё время", $"{command}--custom--0")
+                    InlineKeyboardButton.WithCallbackData("⚙️ Настроить своё время (Любые часы)", $"{command}--custom--0")
                 }
             });
     }
@@ -87,52 +87,36 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
     public InlineKeyboardMarkup GetCustomStartHoursMarkup()
     {
         var command = MarkupCommands.CustomHourStart;
-        return new InlineKeyboardMarkup(
-            new[]
+        var rows = new List<InlineKeyboardButton[]>();
+        for (int r = 0; r < 6; r++)
+        {
+            var row = new InlineKeyboardButton[4];
+            for (int c = 0; c < 4; c++)
             {
-                new[]
-                {
-                    InlineKeyboardButton.WithCallbackData("6:00", $"{command}--6"),
-                    InlineKeyboardButton.WithCallbackData("7:00", $"{command}--7"),
-                    InlineKeyboardButton.WithCallbackData("8:00", $"{command}--8")
-                },
-                new[]
-                {
-                    InlineKeyboardButton.WithCallbackData("9:00", $"{command}--9"),
-                    InlineKeyboardButton.WithCallbackData("10:00", $"{command}--10"),
-                    InlineKeyboardButton.WithCallbackData("11:00", $"{command}--11")
-                },
-                new[]
-                {
-                    InlineKeyboardButton.WithCallbackData("12:00", $"{command}--12"),
-                    InlineKeyboardButton.WithCallbackData("13:00", $"{command}--13"),
-                    InlineKeyboardButton.WithCallbackData("14:00", $"{command}--14")
-                }
-            });
+                int hour = r * 4 + c;
+                row[c] = InlineKeyboardButton.WithCallbackData($"{hour:D2}:00", $"{command}--{hour}");
+            }
+            rows.Add(row);
+        }
+        return new InlineKeyboardMarkup(rows);
     }
 
     public InlineKeyboardMarkup GetCustomEndHoursMarkup(int startHourLocal)
     {
-        var buttons = new List<InlineKeyboardButton[]>();
-        var row = new List<InlineKeyboardButton>();
-
-        var minEnd = Math.Max(startHourLocal + 1, 15);
-        for (int h = minEnd; h <= 23; h++)
+        var command = MarkupCommands.CustomHourEnd;
+        var rows = new List<InlineKeyboardButton[]>();
+        for (int r = 0; r < 6; r++)
         {
-            row.Add(InlineKeyboardButton.WithCallbackData($"{h}:00", $"{MarkupCommands.CustomHourEnd}--{startHourLocal}--{h}"));
-            if (row.Count == 3)
+            var row = new InlineKeyboardButton[4];
+            for (int c = 0; c < 4; c++)
             {
-                buttons.Add(row.ToArray());
-                row.Clear();
+                int hour = r * 4 + c;
+                var label = hour == startHourLocal ? $"{hour:D2}:00 (старт)" : $"{hour:D2}:00";
+                row[c] = InlineKeyboardButton.WithCallbackData(label, $"{command}--{startHourLocal}--{hour}");
             }
+            rows.Add(row);
         }
-
-        if (row.Count > 0)
-        {
-            buttons.Add(row.ToArray());
-        }
-
-        return new InlineKeyboardMarkup(buttons);
+        return new InlineKeyboardMarkup(rows);
     }
 
     public InlineKeyboardMarkup GetDaysMarkup()
@@ -227,4 +211,19 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
         ResizeKeyboard = true,
         OneTimeKeyboard = true
     };
+
+    public InlineKeyboardMarkup GetAdminMenuMarkup() => new(
+        new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📊 Статистика", $"{MarkupCommands.Admin}--stats"),
+                InlineKeyboardButton.WithCallbackData("⭐️ Отзывы", $"{MarkupCommands.Admin}--feedback")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🌍 Пояса пользователей", $"{MarkupCommands.Admin}--tz"),
+                InlineKeyboardButton.WithCallbackData("🔄 Обновить", $"{MarkupCommands.Admin}--stats")
+            }
+        });
 }

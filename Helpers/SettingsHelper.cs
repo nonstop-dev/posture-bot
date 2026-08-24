@@ -10,7 +10,7 @@ public static class SettingsHelper
         var startHourLocal = TimeHelper.GetHourLocal(startHourUtc, offset);
         var endHourLocal = TimeHelper.GetHourLocal(endHourUtc, offset);
         var info = $"⚙️ <b>{BotCommands.MySettings}:</b>\n" +
-                   $"⏰ Время напоминаний: с <b>{startHourLocal}:00</b> по <b>{endHourLocal}:00</b>\n" +
+                   $"⏰ Время напоминаний: с <b>{startHourLocal:D2}:00</b> по <b>{endHourLocal:D2}:00</b>\n" +
                    $"🌍 Моя таймзона: <b>{timezone}</b>\n" +
                    $"📅 Дни напоминаний: <b>{days}</b>";
         return info;

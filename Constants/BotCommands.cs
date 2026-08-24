@@ -7,6 +7,7 @@ public static class BotCommands
     public const string Stats = "/stats";
     public const string Feedback = "/feedback";
     public const string Help = "/help";
+    public const string Admin = "/admin";
 
     public const string StatsMenu = "📊 Статистика";
     public const string SettingsMenu = "⚙️ Настройки";

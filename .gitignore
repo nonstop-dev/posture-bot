@@ -375,12 +375,8 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# VS Code files for those working on multiple tools
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# VS Code files
+.vscode/
 *.code-workspace
 
 # Local History for Visual Studio Code
@@ -476,7 +472,6 @@ fabric.properties
 .idea/caches/build_file_checksums.ser
 
 ### VisualStudioCode ###
-!.vscode/*.code-snippets
 
 # Local History for Visual Studio Code
 

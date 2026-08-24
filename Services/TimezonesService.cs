@@ -6,6 +6,7 @@ namespace NonStop.Posture.Bot.Services;
 
 public class TimezonesService : ITimezonesService
 {
+    private const string TimezonesRelativePath = "Data/timezones.json";
     private readonly Lazy<List<Timezone>> _timezones;
 
     public TimezonesService()
@@ -17,12 +18,13 @@ public class TimezonesService : ITimezonesService
 
     public Timezone GetTimezone(int id) => _timezones.Value.First(t => t.Id == id);
 
-    private List<Timezone> InitTimezones()
+    private static List<Timezone> InitTimezones()
     {
-        // todo: maybe move file name separately
-        using var reader = new StreamReader("Data/timezones.json");
-        var json = reader.ReadToEnd();
-        var timezones = JsonSerializer.Deserialize<List<Timezone>>(json, SerializationHelper.JsonSerializerOptions);
-        return timezones!;
+        var fullPath = Path.Combine(AppContext.BaseDirectory, TimezonesRelativePath);
+        var path = File.Exists(fullPath) ? fullPath : TimezonesRelativePath;
+
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<List<Timezone>>(json, SerializationHelper.JsonSerializerOptions)
+               ?? throw new InvalidOperationException("Не удалось загрузить конфигурацию таймзон");
     }
 }

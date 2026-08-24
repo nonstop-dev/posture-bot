@@ -121,6 +121,9 @@ public class UpdateHandler(
             case BotCommands.MySettings:
                 await HandleMySettingsCommandAsync(chatId, cancellationToken);
                 break;
+            case BotCommands.Admin:
+                await HandleAdminCommandAsync(chatId, cancellationToken);
+                break;
             case "Отмена":
                 _feedbackSessions.TryRemove(chatId, out _);
                 await SendMessageAsync(chatId, "Действие отменено.", markupService.GetDefaultMarkup(), cancellationToken);
@@ -175,7 +178,7 @@ public class UpdateHandler(
                 {
                     await SendMessageAsync(
                         chatId,
-                        "⏰ Выбери <b>час начала</b> напоминаний (утро):",
+                        "⏰ Выбери <b>час начала</b> напоминаний:",
                         markupService.GetCustomStartHoursMarkup(),
                         cancellationToken);
                 }
@@ -189,7 +192,7 @@ public class UpdateHandler(
                 var startHour = int.Parse(callbackData[1]);
                 await SendMessageAsync(
                     chatId,
-                    $"Час начала выбран: {startHour}:00.\nТеперь выбери <b>час окончания</b> напоминаний (вечер):",
+                    $"Час начала выбран: <b>{startHour:D2}:00</b>.\nТеперь выбери <b>час окончания</b> напоминаний:",
                     markupService.GetCustomEndHoursMarkup(startHour),
                     cancellationToken);
                 break;
@@ -206,6 +209,9 @@ public class UpdateHandler(
                 break;
             case MarkupCommands.FeedbackImprove:
                 await HandleFeedbackImproveCallbackAsync(chatId, callbackData[1], cancellationToken);
+                break;
+            case MarkupCommands.Admin:
+                await HandleAdminCallbackAsync(chatId, callbackData[1], cancellationToken);
                 break;
         }
     }
@@ -381,7 +387,7 @@ public class UpdateHandler(
 
         await SendMessageAsync(
             chatId,
-            $"Выбрано время с {userStartHour}:00 по {userEndHour}:00",
+            $"Выбрано время с <b>{userStartHour:D2}:00</b> по <b>{userEndHour:D2}:00</b>",
             isFirstLaunch ? null : markupService.GetDefaultMarkup(),
             cancellationToken);
 
@@ -515,25 +521,12 @@ public class UpdateHandler(
         var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber == null) return null;
 
-        var currentOffset = subscriber.Offset;
-        var offsetDiff = Math.Abs(offset - currentOffset);
-        var startHourUtc = subscriber.StartHourUtc;
-        var endHourUtc = subscriber.EndHourUtc;
-
-        if (currentOffset < offset)
-        {
-            startHourUtc = TimeHelper.RoundHourIfNeed(startHourUtc - offsetDiff);
-            endHourUtc = TimeHelper.RoundHourIfNeed(endHourUtc - offsetDiff);
-        }
-        else if (currentOffset > offset)
-        {
-            startHourUtc = TimeHelper.RoundHourIfNeed(startHourUtc + offsetDiff);
-            endHourUtc = TimeHelper.RoundHourIfNeed(endHourUtc + offsetDiff);
-        }
+        var localStart = TimeHelper.GetHourLocal(subscriber.StartHourUtc, subscriber.Offset);
+        var localEnd = TimeHelper.GetHourLocal(subscriber.EndHourUtc, subscriber.Offset);
 
         subscriber.Offset = offset;
-        subscriber.StartHourUtc = startHourUtc;
-        subscriber.EndHourUtc = endHourUtc;
+        subscriber.StartHourUtc = TimeHelper.GetHourUtc(localStart, offset);
+        subscriber.EndHourUtc = TimeHelper.GetHourUtc(localEnd, offset);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return subscriber;
@@ -564,6 +557,102 @@ public class UpdateHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to send message to {ChatId}", chatId);
+        }
+    }
+
+    private bool IsAdmin(long chatId)
+    {
+        var adminIdStr = botConfiguration.Value.AdminChatId;
+        return !string.IsNullOrEmpty(adminIdStr) && (adminIdStr == chatId.ToString() || long.TryParse(adminIdStr, out var id) && id == chatId);
+    }
+
+    private async Task HandleAdminCommandAsync(long chatId, CancellationToken cancellationToken)
+    {
+        if (!IsAdmin(chatId))
+        {
+            logger.LogWarning("Unauthorized /admin attempt by ChatId {ChatId}", chatId);
+            await SendMessageAsync(chatId, "Команда не найдена. Нажми /help для списка доступных команд.", markupService.GetDefaultMarkup(), cancellationToken);
+            return;
+        }
+
+        var totalUsers = await dbContext.Subscribers.CountAsync(cancellationToken);
+        var configuredUsers = await dbContext.Subscribers.CountAsync(s => s.Configured, cancellationToken);
+        var privateChats = await dbContext.Subscribers.CountAsync(s => s.ChatId > 0, cancellationToken);
+        var groupChats = await dbContext.Subscribers.CountAsync(s => s.ChatId < 0, cancellationToken);
+        var totalMessages = await dbContext.Subscribers.SumAsync(s => (long)s.TotalMessagesSent, cancellationToken);
+        var totalLegendary = await dbContext.Subscribers.SumAsync(s => (long)s.LegendaryCount, cancellationToken);
+
+        var feedbackCount = await dbContext.Feedbacks.CountAsync(cancellationToken);
+        var avgRating = feedbackCount > 0 ? await dbContext.Feedbacks.AverageAsync(f => (double)(f.Rating ?? 0), cancellationToken) : 0;
+
+        var text = $"👑 <b>Панель администратора</b>\n\n" +
+                   $"👥 <b>Пользователи:</b>\n" +
+                   $" • Всего: <b>{totalUsers}</b>\n" +
+                   $" • В личке: <b>{privateChats}</b> | В группах: <b>{groupChats}</b>\n" +
+                   $" • Настроили напоминания: <b>{configuredUsers}</b>\n\n" +
+                   $"📬 <b>Активность:</b>\n" +
+                   $" • Всего выпрямлений: <b>{totalMessages}</b>\n" +
+                   $" • Поймано легендарок: <b>{totalLegendary}</b>\n\n" +
+                   $"⭐️ <b>Обратная связь:</b>\n" +
+                   $" • Отзывов: <b>{feedbackCount}</b>\n" +
+                   $" • Средний рейтинг: <b>{(feedbackCount > 0 ? $"{avgRating:F1} ⭐️" : "нет оценок")}</b>";
+
+        await SendMessageAsync(chatId, text, markupService.GetAdminMenuMarkup(), cancellationToken);
+    }
+
+    private async Task HandleAdminCallbackAsync(long chatId, string action, CancellationToken cancellationToken)
+    {
+        if (!IsAdmin(chatId))
+            return;
+
+        switch (action)
+        {
+            case "stats":
+                await HandleAdminCommandAsync(chatId, cancellationToken);
+                break;
+
+            case "feedback":
+                var latestFeedbacks = await dbContext.Feedbacks
+                    .OrderByDescending(f => f.CreatedAtUtc)
+                    .Take(5)
+                    .ToListAsync(cancellationToken);
+
+                if (latestFeedbacks.Count == 0)
+                {
+                    await SendMessageAsync(chatId, "⭐️ Отзывов пока нет.", markupService.GetAdminMenuMarkup(), cancellationToken);
+                    return;
+                }
+
+                var fbText = "⭐️ <b>Последние 5 отзывов:</b>\n\n";
+                foreach (var fb in latestFeedbacks)
+                {
+                    fbText += $"👤 User <code>{fb.ChatId}</code> ({fb.CreatedAtUtc:dd.MM.yyyy HH:mm} UTC)\n" +
+                              $"Оценка: <b>{fb.Rating} ⭐️</b>\n" +
+                              $"Понравилось: <i>{fb.LikedOption ?? "-"}</i>\n" +
+                              $"Улучшить: <i>{fb.ImproveOption ?? "-"}</i>\n" +
+                              $"Комментарий: {fb.Comment ?? "-"}\n\n";
+                }
+
+                await SendMessageAsync(chatId, fbText, markupService.GetAdminMenuMarkup(), cancellationToken);
+                break;
+
+            case "tz":
+                var tzDistribution = await dbContext.Subscribers
+                    .GroupBy(s => s.Offset)
+                    .Select(g => new { Offset = g.Key, Count = g.Count() })
+                    .OrderByDescending(x => x.Count)
+                    .ToListAsync(cancellationToken);
+
+                var tzText = "🌍 <b>Распределение по часовым поясам:</b>\n\n";
+                var timezones = timezonesService.GetTimezones();
+                foreach (var item in tzDistribution)
+                {
+                    var tzTitle = timezones.FirstOrDefault(t => t.Offset == item.Offset)?.Title ?? $"UTC{(item.Offset >= 0 ? "+" : "")}{item.Offset}";
+                    tzText += $" • <b>{tzTitle}</b>: <b>{item.Count}</b> пользователей\n";
+                }
+
+                await SendMessageAsync(chatId, tzText, markupService.GetAdminMenuMarkup(), cancellationToken);
+                break;
         }
     }
 }

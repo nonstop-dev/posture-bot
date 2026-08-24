@@ -11,4 +11,5 @@ public static class MarkupCommands
     public const string FeedbackRating = "fbr";
     public const string FeedbackLiked = "fbl";
     public const string FeedbackImprove = "fbi";
+    public const string Admin = "adm";
 }
