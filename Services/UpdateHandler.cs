@@ -17,7 +17,7 @@ namespace NonStop.Posture.Bot.Services;
 
 public class UpdateHandler(
     ITelegramBotClient botClient,
-    PostureDbContext dbContext,
+    IServiceScopeFactory scopeFactory,
     ITimezonesService timezonesService,
     IMarkupService markupService,
     IOptions<BotConfiguration> botConfiguration,
@@ -38,36 +38,39 @@ public class UpdateHandler(
 
     public async Task HandleErrorAsync(ITelegramBotClient client, Exception exception, HandleErrorSource source, CancellationToken cancellationToken)
     {
-        var message = exception switch
-        {
-            ApiRequestException apiEx => $"Telegram API Error: [{apiEx.ErrorCode}] {apiEx.Message}",
-            RequestException reqEx => $"Request error: {reqEx.Message}",
-            _ => exception.Message
-        };
-
-        logger.LogError(exception, "HandleError in {Source}: {Message}", source, message);
-
-        if (exception is RequestException)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-        }
+        logger.LogError(exception, "Telegram error from source: {Source}", source);
+        await Task.CompletedTask;
     }
 
     public async Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancellationToken)
     {
         try
         {
-            await (update switch
+            switch (update.Type)
             {
-                { Message: { } message } => OnMessageAsync(message, cancellationToken),
-                { CallbackQuery: { } callbackQuery } => OnCallbackQueryAsync(callbackQuery, cancellationToken),
-                { MyChatMember: { } myChatMember } => OnMyChatMemberAsync(myChatMember, cancellationToken),
-                _ => Task.CompletedTask
-            });
+                case UpdateType.Message:
+                    if (update.Message is { } message)
+                    {
+                        await OnMessageAsync(message, cancellationToken);
+                    }
+                    break;
+                case UpdateType.CallbackQuery:
+                    if (update.CallbackQuery is { } callbackQuery)
+                    {
+                        await OnCallbackQueryAsync(callbackQuery, cancellationToken);
+                    }
+                    break;
+                case UpdateType.MyChatMember:
+                    if (update.MyChatMember is { } myChatMember)
+                    {
+                        await OnMyChatMemberAsync(myChatMember, cancellationToken);
+                    }
+                    break;
+            }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unhandled error in HandleUpdateAsync");
+            logger.LogError(ex, "Error handling update {UpdateId}", update.Id);
         }
     }
 
@@ -75,7 +78,7 @@ public class UpdateHandler(
     {
         var chatId = message.Chat.Id;
 
-        // Обработка геолокации
+        // Обработка отправки геопозиции
         if (message.Location != null)
         {
             await HandleLocationAsync(chatId, message.Location, cancellationToken);
@@ -227,6 +230,9 @@ public class UpdateHandler(
 
     private async Task HandleStartCommandAsync(long chatId, CancellationToken cancellationToken)
     {
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
         var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber == null)
         {
@@ -244,7 +250,10 @@ public class UpdateHandler(
 
     private async Task HandleStatsCommandAsync(long chatId, CancellationToken cancellationToken)
     {
-        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
+        var subscriber = await dbContext.Subscribers.AsNoTracking().FirstOrDefaultAsync(s => s.ChatId == chatId, cancellationToken);
         if (subscriber == null)
         {
             await SendMessageAsync(chatId, "Ты пока не зарегистрирован в боте. Нажми /start!", markupService.GetDefaultMarkup(), cancellationToken);
@@ -285,7 +294,10 @@ public class UpdateHandler(
 
     private async Task HandleMySettingsCommandAsync(long chatId, CancellationToken cancellationToken)
     {
-        var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
+        var subscriber = await dbContext.Subscribers.AsNoTracking().FirstOrDefaultAsync(s => s.ChatId == chatId, cancellationToken);
         if (subscriber == null) return;
 
         var timezones = timezonesService.GetTimezones();
@@ -323,8 +335,7 @@ public class UpdateHandler(
 
     private async Task HandleTimezoneCallbackQueryAsync(long chatId, string timezoneId, CancellationToken cancellationToken)
     {
-        var id = int.Parse(timezoneId);
-        var timezone = timezonesService.GetTimezone(id);
+        var timezone = timezonesService.GetTimezone(int.Parse(timezoneId));
         var subscriber = await UpdateSubscriberTimezoneAsync(chatId, timezone.Offset, cancellationToken);
         var markup = subscriber is { Configured: true } ? markupService.GetDefaultMarkup() : null;
 
@@ -343,6 +354,10 @@ public class UpdateHandler(
     private async Task HandleDaysCallbackQueryAsync(long chatId, string day, CancellationToken cancellationToken)
     {
         var daysPerWeek = int.Parse(day);
+
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
         var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber != null)
         {
@@ -368,6 +383,10 @@ public class UpdateHandler(
     {
         var userStartHour = int.Parse(callbackData[0]);
         var userEndHour = int.Parse(callbackData[1]);
+
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
         var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber == null) return;
 
@@ -414,7 +433,7 @@ public class UpdateHandler(
 
         await SendMessageAsync(
             chatId,
-            "👍 <b>Что тебе нравится в боте больше всего?</b>",
+            "🎯 <b>Что тебе больше всего нравится в боте?</b>",
             markupService.GetFeedbackLikedMarkup(),
             cancellationToken);
     }
@@ -484,6 +503,9 @@ public class UpdateHandler(
     {
         _feedbackSessions.TryRemove(chatId, out _);
 
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
         var feedback = new Feedback
         {
             ChatId = chatId,
@@ -518,6 +540,9 @@ public class UpdateHandler(
 
     private async Task<Subscriber?> UpdateSubscriberTimezoneAsync(long chatId, int offset, CancellationToken cancellationToken)
     {
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
         var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber == null) return null;
 
@@ -534,6 +559,9 @@ public class UpdateHandler(
 
     private async Task RemoveSubscriberAsync(long chatId, CancellationToken cancellationToken)
     {
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
         var subscriber = await dbContext.Subscribers.FindAsync([chatId], cancellationToken);
         if (subscriber != null)
         {
@@ -575,6 +603,9 @@ public class UpdateHandler(
             return;
         }
 
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
         var totalUsers = await dbContext.Subscribers.CountAsync(cancellationToken);
         var configuredUsers = await dbContext.Subscribers.CountAsync(s => s.Configured, cancellationToken);
         var privateChats = await dbContext.Subscribers.CountAsync(s => s.ChatId > 0, cancellationToken);
@@ -612,46 +643,54 @@ public class UpdateHandler(
                 break;
 
             case "feedback":
-                var latestFeedbacks = await dbContext.Feedbacks
-                    .OrderByDescending(f => f.CreatedAtUtc)
-                    .Take(5)
-                    .ToListAsync(cancellationToken);
-
-                if (latestFeedbacks.Count == 0)
+                using (var scope = scopeFactory.CreateScope())
                 {
-                    await SendMessageAsync(chatId, "⭐️ Отзывов пока нет.", markupService.GetAdminMenuMarkup(), cancellationToken);
-                    return;
-                }
+                    var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+                    var latestFeedbacks = await dbContext.Feedbacks
+                        .OrderByDescending(f => f.CreatedAtUtc)
+                        .Take(5)
+                        .ToListAsync(cancellationToken);
 
-                var fbText = "⭐️ <b>Последние 5 отзывов:</b>\n\n";
-                foreach (var fb in latestFeedbacks)
-                {
-                    fbText += $"👤 User <code>{fb.ChatId}</code> ({fb.CreatedAtUtc:dd.MM.yyyy HH:mm} UTC)\n" +
-                              $"Оценка: <b>{fb.Rating} ⭐️</b>\n" +
-                              $"Понравилось: <i>{fb.LikedOption ?? "-"}</i>\n" +
-                              $"Улучшить: <i>{fb.ImproveOption ?? "-"}</i>\n" +
-                              $"Комментарий: {fb.Comment ?? "-"}\n\n";
-                }
+                    if (latestFeedbacks.Count == 0)
+                    {
+                        await SendMessageAsync(chatId, "⭐️ Отзывов пока нет.", markupService.GetAdminMenuMarkup(), cancellationToken);
+                        return;
+                    }
 
-                await SendMessageAsync(chatId, fbText, markupService.GetAdminMenuMarkup(), cancellationToken);
+                    var fbText = "⭐️ <b>Последние 5 отзывов:</b>\n\n";
+                    foreach (var fb in latestFeedbacks)
+                    {
+                        fbText += $"👤 User <code>{fb.ChatId}</code> ({fb.CreatedAtUtc:dd.MM.yyyy HH:mm} UTC)\n" +
+                                  $"Оценка: <b>{fb.Rating} ⭐️</b>\n" +
+                                  $"Понравилось: <i>{fb.LikedOption ?? "-"}</i>\n" +
+                                  $"Улучшить: <i>{fb.ImproveOption ?? "-"}</i>\n" +
+                                  $"Комментарий: {fb.Comment ?? "-"}\n\n";
+                    }
+
+                    await SendMessageAsync(chatId, fbText, markupService.GetAdminMenuMarkup(), cancellationToken);
+                }
                 break;
 
             case "tz":
-                var tzDistribution = await dbContext.Subscribers
-                    .GroupBy(s => s.Offset)
-                    .Select(g => new { Offset = g.Key, Count = g.Count() })
-                    .OrderByDescending(x => x.Count)
-                    .ToListAsync(cancellationToken);
-
-                var tzText = "🌍 <b>Распределение по часовым поясам:</b>\n\n";
-                var timezones = timezonesService.GetTimezones();
-                foreach (var item in tzDistribution)
+                using (var scope = scopeFactory.CreateScope())
                 {
-                    var tzTitle = timezones.FirstOrDefault(t => t.Offset == item.Offset)?.Title ?? $"UTC{(item.Offset >= 0 ? "+" : "")}{item.Offset}";
-                    tzText += $" • <b>{tzTitle}</b>: <b>{item.Count}</b> пользователей\n";
-                }
+                    var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+                    var tzDistribution = await dbContext.Subscribers
+                        .GroupBy(s => s.Offset)
+                        .Select(g => new { Offset = g.Key, Count = g.Count() })
+                        .OrderByDescending(x => x.Count)
+                        .ToListAsync(cancellationToken);
 
-                await SendMessageAsync(chatId, tzText, markupService.GetAdminMenuMarkup(), cancellationToken);
+                    var tzText = "🌍 <b>Распределение по часовым поясам:</b>\n\n";
+                    var timezones = timezonesService.GetTimezones();
+                    foreach (var item in tzDistribution)
+                    {
+                        var tzTitle = timezones.FirstOrDefault(t => t.Offset == item.Offset)?.Title ?? $"UTC{(item.Offset >= 0 ? "+" : "")}{item.Offset}";
+                        tzText += $" • <b>{tzTitle}</b>: <b>{item.Count}</b> пользователей\n";
+                    }
+
+                    await SendMessageAsync(chatId, tzText, markupService.GetAdminMenuMarkup(), cancellationToken);
+                }
                 break;
         }
     }
