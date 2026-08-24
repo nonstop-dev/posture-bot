@@ -518,9 +518,9 @@ public class UpdateHandler(
         dbContext.Feedbacks.Add(feedback);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Пересылка отзыва в AdminChatId
-        var adminChatIdStr = botConfiguration.Value.AdminChatId;
-        if (!string.IsNullOrEmpty(adminChatIdStr) && long.TryParse(adminChatIdStr, out var adminChatId))
+        // Пересылка отзыва всем администраторам
+        var adminIds = botConfiguration.Value.GetAdminIds();
+        if (adminIds.Count > 0)
         {
             var adminMessage = $"📬 <b>Новый отзыв о боте!</b>\n" +
                                $"User ID: <code>{chatId}</code>\n" +
@@ -528,7 +528,11 @@ public class UpdateHandler(
                                $"Понравилось: {session.LikedOption}\n" +
                                $"Улучшить: {session.ImproveOption}\n" +
                                $"Комментарий: {session.Comment ?? "-"}";
-            await SendMessageAsync(adminChatId, adminMessage, null, cancellationToken);
+
+            foreach (var adminId in adminIds)
+            {
+                await SendMessageAsync(adminId, adminMessage, null, cancellationToken);
+            }
         }
 
         await SendMessageAsync(
@@ -590,8 +594,7 @@ public class UpdateHandler(
 
     private bool IsAdmin(long chatId)
     {
-        var adminIdStr = botConfiguration.Value.AdminChatId;
-        return !string.IsNullOrEmpty(adminIdStr) && (adminIdStr == chatId.ToString() || long.TryParse(adminIdStr, out var id) && id == chatId);
+        return botConfiguration.Value.GetAdminIds().Contains(chatId);
     }
 
     private async Task HandleAdminCommandAsync(long chatId, CancellationToken cancellationToken)
