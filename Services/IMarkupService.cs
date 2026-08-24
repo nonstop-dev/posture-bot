@@ -17,4 +17,5 @@ public interface IMarkupService
     InlineKeyboardMarkup GetFeedbackImproveMarkup();
     ReplyKeyboardMarkup GetLocationRequestMarkup();
     InlineKeyboardMarkup GetAdminMenuMarkup();
+    InlineKeyboardMarkup GetBroadcastConfirmMarkup();
 }

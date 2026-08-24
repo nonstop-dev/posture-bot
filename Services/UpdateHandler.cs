@@ -25,6 +25,7 @@ public class UpdateHandler(
     ) : IUpdateHandler
 {
     private static readonly ConcurrentDictionary<long, FeedbackSession> _feedbackSessions = new();
+    private static readonly ConcurrentDictionary<long, AdminBroadcastSession> _broadcastSessions = new();
 
     private class FeedbackSession
     {
@@ -34,6 +35,12 @@ public class UpdateHandler(
         public string? Comment { get; set; }
         public bool WaitingForText { get; set; }
         public string? StepWaitingForText { get; set; }
+    }
+
+    private class AdminBroadcastSession
+    {
+        public bool WaitingForMessage { get; set; }
+        public string? PendingMessageText { get; set; }
     }
 
     public async Task HandleErrorAsync(ITelegramBotClient client, Exception exception, HandleErrorSource source, CancellationToken cancellationToken)
@@ -89,6 +96,20 @@ public class UpdateHandler(
         if (_feedbackSessions.TryGetValue(chatId, out var session) && session.WaitingForText)
         {
             await HandleFeedbackTextInputAsync(chatId, message.Text ?? "", session, cancellationToken);
+            return;
+        }
+
+        // Обработка ввода текста для рассылки от администратора
+        if (IsAdmin(chatId) && _broadcastSessions.TryGetValue(chatId, out var bcastSession) && bcastSession.WaitingForMessage)
+        {
+            if (message.Text is "Отмена" or "/cancel")
+            {
+                _broadcastSessions.TryRemove(chatId, out _);
+                await SendMessageAsync(chatId, "Рассылка отменена.", markupService.GetAdminMenuMarkup(), cancellationToken);
+                return;
+            }
+
+            await HandleBroadcastPreviewAsync(chatId, message.Text ?? "", bcastSession, cancellationToken);
             return;
         }
 
@@ -695,6 +716,107 @@ public class UpdateHandler(
                     await SendMessageAsync(chatId, tzText, markupService.GetAdminMenuMarkup(), cancellationToken);
                 }
                 break;
+
+            case "broadcast":
+                _broadcastSessions[chatId] = new AdminBroadcastSession { WaitingForMessage = true };
+                await SendMessageAsync(
+                    chatId,
+                    "📢 <b>Создание рассылки всем пользователям</b>\n\n" +
+                    "Отправь текст сообщения, которое нужно разослать.\n" +
+                    "Поддерживается HTML-разметка (<b>жирный</b>, <i>курсив</i>, <code>код</code>, ссылки).\n\n" +
+                    "<i>Для отмены отправь «Отмена».</i>",
+                    null,
+                    cancellationToken);
+                break;
+
+            case "bcast_confirm":
+                if (_broadcastSessions.TryRemove(chatId, out var activeBcast) && !string.IsNullOrWhiteSpace(activeBcast.PendingMessageText))
+                {
+                    await ExecuteBroadcastAsync(chatId, activeBcast.PendingMessageText, cancellationToken);
+                }
+                else
+                {
+                    await SendMessageAsync(chatId, "⚠️ Сессия рассылки устарела. Начни заново через меню.", markupService.GetAdminMenuMarkup(), cancellationToken);
+                }
+                break;
+
+            case "bcast_cancel":
+                _broadcastSessions.TryRemove(chatId, out _);
+                await SendMessageAsync(chatId, "Рассылка отменена.", markupService.GetAdminMenuMarkup(), cancellationToken);
+                break;
         }
+    }
+
+    private async Task HandleBroadcastPreviewAsync(long chatId, string text, AdminBroadcastSession session, CancellationToken cancellationToken)
+    {
+        session.WaitingForMessage = false;
+        session.PendingMessageText = text;
+
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+        var userCount = await dbContext.Subscribers.CountAsync(cancellationToken);
+
+        var previewMessage = $"📢 <b>Предпросмотр рассылки:</b>\n" +
+                             $"────────────────────\n" +
+                             $"{text}\n" +
+                             $"────────────────────\n" +
+                             $"👥 Получателей: <b>{userCount}</b>\n\n" +
+                             $"Отправить это сообщение всем пользователям?";
+
+        await SendMessageAsync(chatId, previewMessage, markupService.GetBroadcastConfirmMarkup(), cancellationToken);
+    }
+
+    private async Task ExecuteBroadcastAsync(long adminChatId, string broadcastText, CancellationToken cancellationToken)
+    {
+        await SendMessageAsync(adminChatId, "⏳ <b>Запуск рассылки...</b>", null, cancellationToken);
+
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PostureDbContext>();
+
+        var subscribers = await dbContext.Subscribers.AsNoTracking().ToListAsync(cancellationToken);
+
+        int successCount = 0;
+        int blockedCount = 0;
+        int errorCount = 0;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        foreach (var s in subscribers)
+        {
+            try
+            {
+                await botClient.SendMessage(
+                    s.ChatId,
+                    broadcastText,
+                    parseMode: ParseMode.Html,
+                    replyMarkup: markupService.GetDefaultMarkup(),
+                    cancellationToken: cancellationToken);
+
+                successCount++;
+            }
+            catch (ApiRequestException ex) when (ex.ErrorCode == 403)
+            {
+                blockedCount++;
+                logger.LogWarning("User {ChatId} blocked the bot during broadcast.", s.ChatId);
+                await RemoveSubscriberAsync(s.ChatId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                errorCount++;
+                logger.LogError(ex, "Failed to send broadcast to {ChatId}", s.ChatId);
+            }
+
+            // Задержка 40 мс для защиты от ограничений Telegram Rate Limits
+            await Task.Delay(40, cancellationToken);
+        }
+
+        stopwatch.Stop();
+
+        var report = $"📢 <b>Рассылка завершена!</b>\n\n" +
+                     $"✅ Успешно доставлено: <b>{successCount}</b>\n" +
+                     $"🚫 Заблокировали бота (удалены): <b>{blockedCount}</b>\n" +
+                     $"❌ Других ошибок: <b>{errorCount}</b>\n" +
+                     $"⏱ Время выполнения: <b>{stopwatch.Elapsed.TotalSeconds:F1} сек</b>";
+
+        await SendMessageAsync(adminChatId, report, markupService.GetAdminMenuMarkup(), cancellationToken);
     }
 }

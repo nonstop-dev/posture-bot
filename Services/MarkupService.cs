@@ -223,7 +223,21 @@ public class MarkupService(ITimezonesService timezonesService) : IMarkupService
             new[]
             {
                 InlineKeyboardButton.WithCallbackData("🌍 Пояса пользователей", $"{MarkupCommands.Admin}--tz"),
-                InlineKeyboardButton.WithCallbackData("🔄 Обновить", $"{MarkupCommands.Admin}--stats")
+                InlineKeyboardButton.WithCallbackData("📢 Рассылка", $"{MarkupCommands.Admin}--broadcast")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔄 Обновить панель", $"{MarkupCommands.Admin}--stats")
+            }
+        });
+
+    public InlineKeyboardMarkup GetBroadcastConfirmMarkup() => new(
+        new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🚀 Подтвердить и отправить", $"{MarkupCommands.Admin}--bcast_confirm"),
+                InlineKeyboardButton.WithCallbackData("❌ Отменить", $"{MarkupCommands.Admin}--bcast_cancel")
             }
         });
 }
