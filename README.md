@@ -1,11 +1,13 @@
 # 🏔 Выпрями спину, гора! (Telegram Bot)
 
-**Бот-напоминалка для формирования здоровой привычки держать ровную осанку каждый день.**
-
-<img width="948" height="1134" alt="image" src="https://github.com/user-attachments/assets/29f339fa-5e47-4ac4-ad65-99c6833a7054" />
+<img width="600" height="718" alt="image" src="https://github.com/user-attachments/assets/29f339fa-5e47-4ac4-ad65-99c6833a7054" />
 https://t.me/NeSutulisBot
 
-> *"Выровняю спину даже верблюду!"* 🐫
+
+
+*"Выровняю спину даже верблюду!"* 🐫
+
+**Бот-напоминалка для формирования здоровой привычки держать ровную осанку каждый день.**
 
 ---
 
