@@ -1,6 +1,8 @@
 # 🏔 Выпрями спину, гора! (Telegram Bot)
 
 <img width="600" height="718" alt="image" src="https://github.com/user-attachments/assets/29f339fa-5e47-4ac4-ad65-99c6833a7054" />
+
+
 https://t.me/NeSutulisBot
 
 
