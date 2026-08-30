@@ -98,11 +98,11 @@ nano .env
 
 Вставьте в `.env` ваши конфигурационные данные:
 ```ini
-BOT_TOKEN=242464316:AAFxxhWAurba-hw526Uo6TxjO7WS8B7PIio
+BOT_TOKEN=your_bot_token_here
 POSTGRES_DB=posturedb
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=generate_your_secure_password_here
-ADMIN_CHAT_ID=
+ADMIN_CHAT_ID=your_id_here,second_admin_id_here
 ```
 *(Сохраните файл: `Ctrl + O`, затем `Enter`, для выхода: `Ctrl + X`)*
 

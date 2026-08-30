@@ -699,3 +699,5 @@ Temporary Items
 # Environment & Secrets
 .env
 *.key.json
+appsettings.Development.json
+appsettings.*.local.json
